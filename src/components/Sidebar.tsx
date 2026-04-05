@@ -2,13 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import {
   LayoutDashboard,
   Package,
   Users,
   ShoppingCart,
   Factory,
+  Truck,
   BarChart3,
+  LogOut,
 } from 'lucide-react';
 
 const navigation = [
@@ -17,6 +20,7 @@ const navigation = [
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Commandes', href: '/commandes', icon: ShoppingCart },
   { name: 'Fabrication', href: '/fabrication', icon: Factory },
+  { name: 'Livraisons', href: '/livraisons', icon: Truck },
   { name: 'Rapports', href: '/rapports', icon: BarChart3 },
 ];
 
@@ -52,7 +56,14 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-700">
-        <p className="text-gray-500 text-xs text-center">PFE 2025</p>
+        <button
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white w-full transition-colors"
+        >
+          <LogOut size={20} />
+          <span>Déconnexion</span>
+        </button>
+        <p className="text-gray-500 text-xs text-center mt-2">PFE 2025</p>
       </div>
     </div>
   );
