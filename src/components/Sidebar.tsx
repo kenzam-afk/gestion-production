@@ -15,13 +15,13 @@ import {
 } from 'lucide-react';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Produits', href: '/produits', icon: Package },
-  { name: 'Clients', href: '/clients', icon: Users },
-  { name: 'Commandes', href: '/commandes', icon: ShoppingCart },
-  { name: 'Fabrication', href: '/fabrication', icon: Factory },
-  { name: 'Livraisons', href: '/livraisons', icon: Truck },
-  { name: 'Rapports', href: '/rapports', icon: BarChart3 },
+  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  { name: 'Produits', href: '/admin/produits', icon: Package },
+  { name: 'Clients', href: '/admin/clients', icon: Users },
+  { name: 'Commandes', href: '/admin/commandes', icon: ShoppingCart },
+  { name: 'Fabrication', href: '/admin/fabrication', icon: Factory },
+  { name: 'Livraisons', href: '/admin/livraisons', icon: Truck },
+  { name: 'Rapports', href: '/admin/rapports', icon: BarChart3 },
 ];
 
 export default function Sidebar() {
@@ -57,7 +57,7 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-gray-700">
         <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={() => signOut({ callbackUrl: '/' })}
           className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white w-full transition-colors"
         >
           <LogOut size={20} />
