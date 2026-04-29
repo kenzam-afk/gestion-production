@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import SessionWrapper from "./SessionWrapper";
 
 export const metadata: Metadata = {
   title: "Gestion Production",
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
-        {children}
+        <SessionWrapper>{children}</SessionWrapper>
       </body>
     </html>
   );

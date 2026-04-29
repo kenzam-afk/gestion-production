@@ -6,9 +6,12 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 interface Client {
   id: number;
   nom: string;
+  prenom: string;
   email: string;
   telephone: string;
   adresse: string;
+  type_client: string;
+  titre: string;
 }
 
 export default function Clients() {
@@ -28,26 +31,19 @@ export default function Clients() {
       setError("");
       const res = await fetch("/api/clients");
       const data = await res.json();
-
       if (!res.ok) {
         setClients([]);
         setError(data?.error || "Impossible de charger les clients");
         return;
       }
-
       setClients(Array.isArray(data) ? data : []);
-      if (!Array.isArray(data)) {
-        setError("Format de reponse invalide depuis l API");
-      }
     } catch {
       setClients([]);
-      setError("Erreur reseau lors du chargement des clients");
+      setError("Erreur réseau lors du chargement des clients");
     }
   }
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  useEffect(() => { fetchClients(); }, []);
 
   function openAdd() {
     setEditClient(null);
@@ -57,12 +53,7 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditClient(c);
-    setForm({
-      nom: c.nom,
-      email: c.email,
-      telephone: c.telephone,
-      adresse: c.adresse,
-    });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse });
     setShowModal(true);
   }
 
@@ -79,7 +70,7 @@ export default function Clients() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm("Supprimer ce client ?")) return;
+    if (!confirm("Supprimer ce client ? Ses commandes seront aussi supprimées.")) return;
     await fetch(`/api/clients/${id}`, { method: "DELETE" });
     fetchClients();
   }
@@ -113,7 +104,7 @@ export default function Clients() {
             </tr>
           </thead>
           <tbody>
-            {clients.length === 0 && (
+            {clients.length === 0 && !error && (
               <tr>
                 <td colSpan={5} className="text-center p-8 text-gray-400">
                   Aucun client
@@ -122,23 +113,29 @@ export default function Clients() {
             )}
             {clients.map((c) => (
               <tr key={c.id} className="border-b hover:bg-gray-50">
-                <td className="p-4 font-medium">{c.nom}</td>
+                <td className="p-4 font-medium">
+                  {c.type_client === 'entreprise' ? c.titre : `${c.prenom || ''} ${c.nom || ''}`.trim() || c.nom}
+                </td>
                 <td className="p-4">{c.email}</td>
                 <td className="p-4">{c.telephone}</td>
                 <td className="p-4">{c.adresse}</td>
-                <td className="p-4 flex gap-2">
-                  <button
-                    onClick={() => openEdit(c)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(c.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openEdit(c)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                      title="Modifier"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(c.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -169,9 +166,7 @@ export default function Clients() {
                 className="w-full border rounded-lg p-2"
                 placeholder="Téléphone"
                 value={form.telephone}
-                onChange={(e) =>
-                  setForm({ ...form, telephone: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, telephone: e.target.value })}
               />
               <textarea
                 className="w-full border rounded-lg p-2"

@@ -1,6 +1,6 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import pool from '@/lib/db';
+import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 
 const handler = NextAuth({
@@ -14,10 +14,10 @@ const handler = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const [rows]: any = await pool.query(
-          'SELECT * FROM utilisateurs WHERE email = ?',
-          [credentials.email]
-        );
+        const sql = neon(process.env.DATABASE_URL!);
+        const rows = await sql`
+          SELECT * FROM utilisateurs WHERE email = ${credentials.email}
+        `;
 
         if (rows.length === 0) return null;
 
@@ -27,7 +27,7 @@ const handler = NextAuth({
         if (!passwordMatch) return null;
 
         return {
-          id: user.id,
+          id: String(user.id),
           name: user.nom,
           email: user.email,
           role: user.role,

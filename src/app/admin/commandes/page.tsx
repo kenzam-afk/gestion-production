@@ -14,12 +14,14 @@ interface Commande {
 interface Client {
   id: number;
   nom: string;
+  titre: string;
+  type_client: string;
 }
 
 interface Produit {
   id: number;
   nom: string;
-  prix: number;
+  prix_vente: number;
 }
 
 export default function Commandes() {
@@ -38,9 +40,9 @@ export default function Commandes() {
       fetch('/api/clients').then(r => r.json()),
       fetch('/api/produits').then(r => r.json()),
     ]);
-    setCommandes(cmd);
-    setClients(cli);
-    setProduits(prod);
+    setCommandes(Array.isArray(cmd) ? cmd : []);
+    setClients(Array.isArray(cli) ? cli : []);
+    setProduits(Array.isArray(prod) ? prod : []);
   }
 
   useEffect(() => { fetchAll(); }, []);
@@ -66,7 +68,7 @@ export default function Commandes() {
       newProduits[index] = {
         ...newProduits[index],
         produit_id: value as string,
-        prix_unitaire: produit?.prix || 0
+        prix_unitaire: produit?.prix_vente || 0
       };
     } else if (field === 'quantite') {
       newProduits[index] = {
@@ -228,14 +230,12 @@ export default function Commandes() {
         </table>
       </div>
 
-      {/* Modal nouvelle commande */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">Nouvelle commande</h2>
 
             <div className="space-y-4">
-              {/* Sélection client */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
                 <select
@@ -245,12 +245,13 @@ export default function Commandes() {
                 >
                   <option value="">Sélectionner un client</option>
                   {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.nom}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.type_client === 'entreprise' ? c.titre : `${c.prenom || ''} ${c.nom || ''}`.trim() || `Client #${c.id}`}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              {/* Lignes produits */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Produits</label>
                 <div className="space-y-2">
@@ -263,7 +264,7 @@ export default function Commandes() {
                       >
                         <option value="">Choisir un produit</option>
                         {produits.map(pr => (
-                          <option key={pr.id} value={pr.id}>{pr.nom}</option>
+                          <option key={pr.id} value={pr.id}>{pr.nom} — {pr.prix_vente} DA</option>
                         ))}
                       </select>
 
@@ -286,7 +287,7 @@ export default function Commandes() {
                       </div>
 
                       <span className="text-sm text-gray-500 w-24 text-right">
-                        {p.prix_unitaire * p.quantite} DA
+                        {(p.prix_unitaire * p.quantite).toFixed(2)} DA
                       </span>
 
                       {form.produits.length > 1 && (
@@ -306,10 +307,9 @@ export default function Commandes() {
                 </button>
               </div>
 
-              {/* Total */}
               <div className="flex justify-between font-bold text-lg border-t pt-3">
                 <span>Total estimé</span>
-                <span>{totalModal} DA</span>
+                <span>{totalModal.toFixed(2)} DA</span>
               </div>
             </div>
 
