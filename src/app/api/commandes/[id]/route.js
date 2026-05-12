@@ -1,68 +1,139 @@
 import sql from '@/lib/db';
 
-export async function GET(request, { params }) {
+// ─── GET : détail d'une commande avec ses produits ──────────
+export async function GET(req, { params }) {
   try {
-    const { id } = await params;
+    const { id } = params;
 
-    const rows = await sql`
-      SELECT c.*, cl.nom as client_nom, cl.email as client_email
+    const [commande] = await sql`
+      SELECT
+        c.*,
+        cl.nom       AS client_nom,
+        cl.prenom    AS client_prenom,
+        cl.email     AS client_email,
+        cl.telephone AS client_telephone,
+        cl.adresse   AS client_adresse,
+        cl.type_client,
+        cl.titre     AS client_titre
       FROM commandes c
-      JOIN clients cl ON c.client_id = cl.id
+      LEFT JOIN clients cl ON cl.id = c.client_id
       WHERE c.id = ${id}
     `;
 
-    if (rows.length === 0) {
-      return Response.json({ error: 'Commande non trouvee' }, { status: 404 });
+    if (!commande) {
+      return Response.json({ error: 'Commande introuvable' }, { status: 404 });
     }
 
-    const produits = await sql`
-      SELECT cp.*, p.nom as produit_nom
+    // Lignes de commande
+    const lignes = await sql`
+      SELECT
+        cp.*,
+        p.nom         AS produit_nom,
+        p.description AS produit_description,
+        p.unite
       FROM commande_produits cp
-      JOIN produits p ON cp.produit_id = p.id
+      JOIN produits p ON p.id = cp.produit_id
       WHERE cp.commande_id = ${id}
     `;
 
-    return Response.json({ ...rows[0], produits });
+    // Bon de commande associé
+    const [bon_commande] = await sql`
+      SELECT * FROM bons_commande WHERE commande_id = ${id}
+    `;
+
+    // Bon de livraison associé
+    const [bon_livraison] = await sql`
+      SELECT bl.* FROM bons_livraison bl
+      JOIN livraisons l ON l.id = bl.livraison_id
+      WHERE bl.commande_id = ${id}
+    `;
+
+    return Response.json({
+      ...commande,
+      lignes,
+      bon_commande:  bon_commande  || null,
+      bon_livraison: bon_livraison || null,
+    });
+
   } catch (error) {
-    return Response.json({ error: 'Erreur serveur' }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function PUT(request, { params }) {
+// ─── PUT : changer le statut d'une commande ─────────────────
+export async function PUT(req, { params }) {
   try {
-    const { id } = await params;
-    const body = await request.json();
-    const { statut } = body;
+    const { id }    = params;
+    const { statut } = await req.json();
 
-    await sql`UPDATE commandes SET statut = ${statut} WHERE id = ${id}`;
-
-    if (statut === 'confirmee') {
-      const produits = await sql`
-        SELECT * FROM commande_produits WHERE commande_id = ${id}
-      `;
-      for (const p of produits) {
-        await sql`
-          INSERT INTO ordres_fabrication (commande_id, produit_id, quantite, statut)
-          VALUES (${id}, ${p.produit_id}, ${p.quantite}, 'planifie')
-        `;
-      }
-      await sql`UPDATE commandes SET statut = 'en_fabrication' WHERE id = ${id}`;
+    const statutsValides = ['en_attente', 'confirmee', 'en_fabrication', 'pret_livraison', 'livree', 'annulee'];
+    if (!statutsValides.includes(statut)) {
+      return Response.json({ error: 'Statut invalide' }, { status: 400 });
     }
 
-    return Response.json({ message: 'Commande mise a jour' });
+    const [commande] = await sql`
+      UPDATE commandes
+      SET statut = ${statut}, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (!commande) {
+      return Response.json({ error: 'Commande introuvable' }, { status: 404 });
+    }
+
+    // Si on passe en fabrication → créer un ordre de fabrication
+    if (statut === 'en_fabrication') {
+      const lignes = await sql`
+        SELECT * FROM commande_produits WHERE commande_id = ${id}
+      `;
+      for (const ligne of lignes) {
+        // Vérifier si un ordre existe déjà
+        const existing = await sql`
+          SELECT id FROM ordres_fabrication
+          WHERE commande_id = ${id} AND produit_id = ${ligne.produit_id}
+        `;
+        if (existing.length === 0) {
+          await sql`
+            INSERT INTO ordres_fabrication (commande_id, produit_id, quantite, statut)
+            VALUES (${id}, ${ligne.produit_id}, ${ligne.quantite}, 'planifie')
+          `;
+        }
+      }
+    }
+
+    // Si annulée → remettre le stock
+    if (statut === 'annulee') {
+      const lignes = await sql`
+        SELECT * FROM commande_produits WHERE commande_id = ${id}
+      `;
+      for (const ligne of lignes) {
+        await sql`
+          UPDATE produits
+          SET stock_disponible = stock_disponible + ${ligne.quantite}
+          WHERE id = ${ligne.produit_id}
+        `;
+        await sql`
+          INSERT INTO mouvements_stock (produit_id, type, quantite, raison, reference_id)
+          VALUES (${ligne.produit_id}, 'entree', ${ligne.quantite}, 'annulation_commande', ${id})
+        `;
+      }
+    }
+
+    return Response.json(commande);
+
   } catch (error) {
-    return Response.json({ error: 'Erreur serveur' }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE(request, { params }) {
+// ─── DELETE : supprimer une commande ────────────────────────
+export async function DELETE(req, { params }) {
   try {
-    const { id } = await params;
-    await sql`DELETE FROM ordres_fabrication WHERE commande_id = ${id}`;
-    await sql`DELETE FROM commande_produits WHERE commande_id = ${id}`;
+    const { id } = params;
     await sql`DELETE FROM commandes WHERE id = ${id}`;
-    return Response.json({ message: 'Commande supprimee' });
+    return Response.json({ success: true });
   } catch (error) {
-    return Response.json({ error: 'Erreur serveur' }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 }

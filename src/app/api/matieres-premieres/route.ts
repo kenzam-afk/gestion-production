@@ -1,37 +1,123 @@
-import { neon } from '@neondatabase/serverless';
-import { NextResponse } from 'next/server';
+import sql from '@/lib/db';
 
-const sql = neon(process.env.DATABASE_URL!);
-
+// ─── GET : toutes les matières avec état stock ───────────────
 export async function GET() {
   try {
-    const rows = await sql`SELECT * FROM matieres_premieres ORDER BY created_at DESC`;
-    return NextResponse.json(rows);
+    const rows = await sql`
+      SELECT
+        mp.*,
+        CASE
+          WHEN mp.stock_actuel = 0                        THEN 'rupture'
+          WHEN mp.stock_actuel <= mp.stock_minimum        THEN 'critique'
+          WHEN mp.stock_actuel <= mp.stock_minimum * 1.5  THEN 'bas'
+          ELSE 'ok'
+        END AS etat_stock
+      FROM matieres_premieres mp
+      ORDER BY mp.titre ASC
+    `;
+    return Response.json(rows);
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
+// ─── POST : créer une matière première ──────────────────────
+export async function POST(req) {
   try {
-    const { titre, description, cout_en_da, unite } = await req.json();
+    const { titre, unite, stock_actuel, stock_minimum, cout_unitaire, fournisseur } = await req.json();
 
-    // Récupère le taux actuel
-    const tauxRes = await fetch(`${process.env.NEXTAUTH_URL}/api/taux-change`);
-    const tauxData = await tauxRes.json();
-    const taux = tauxData.taux_eur_dzd;
+    if (!titre) return Response.json({ error: 'Le titre est requis' }, { status: 400 });
 
-    const cout_en_euro = (parseFloat(cout_en_da) / taux).toFixed(2);
-
-    await sql`
-      INSERT INTO matieres_premieres 
-        (titre, description, cout_unitaire, unite, cout_en_da, cout_en_euro, taux_change)
-      VALUES 
-        (${titre}, ${description}, ${cout_en_da}, ${unite}, ${cout_en_da}, ${cout_en_euro}, ${taux})
+    const [matiere] = await sql`
+      INSERT INTO matieres_premieres
+        (titre, unite, stock_actuel, stock_minimum, cout_unitaire, fournisseur)
+      VALUES
+        (${titre}, ${unite || 'unités'},
+         ${stock_actuel || 0}, ${stock_minimum || 5},
+         ${cout_unitaire || 0}, ${fournisseur || null})
+      RETURNING *
     `;
 
-    return NextResponse.json({ success: true });
+    // Enregistrer le stock initial
+    if (Number(stock_actuel) > 0) {
+      await sql`
+        INSERT INTO mouvements_matieres (matiere_id, type, quantite, raison)
+        VALUES (${matiere.id}, 'entree', ${stock_actuel}, 'stock_initial')
+      `;
+    }
+
+    return Response.json(matiere, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return Response.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+// ─── PATCH : ajuster le stock (entrée / sortie) ──────────────
+export async function PATCH(req) {
+  try {
+    const { id, nouveau_stock, quantite, operation, raison } = await req.json();
+
+    if (id === undefined) {
+      return Response.json({ error: 'id requis' }, { status: 400 });
+    }
+
+    let updated;
+
+    // Mode 1 : définir directement le nouveau stock
+    if (nouveau_stock !== undefined) {
+      const [current] = await sql`SELECT stock_actuel FROM matieres_premieres WHERE id = ${id}`;
+      const delta = Number(nouveau_stock) - Number(current.stock_actuel);
+
+      ;[updated] = await sql`
+        UPDATE matieres_premieres
+        SET stock_actuel = ${nouveau_stock}
+        WHERE id = ${id}
+        RETURNING *
+      `;
+
+      await sql`
+        INSERT INTO mouvements_matieres (matiere_id, type, quantite, raison)
+        VALUES (
+          ${id},
+          ${delta >= 0 ? 'entree' : 'sortie'},
+          ${Math.abs(delta)},
+          ${raison || 'ajustement_manuel'}
+        )
+      `;
+    }
+
+    // Mode 2 : entrée ou sortie relative
+    else if (quantite !== undefined && operation) {
+      const delta = operation === 'sortie' ? -Number(quantite) : Number(quantite);
+      ;[updated] = await sql`
+        UPDATE matieres_premieres
+        SET stock_actuel = stock_actuel + ${delta}
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      await sql`
+        INSERT INTO mouvements_matieres (matiere_id, type, quantite, raison)
+        VALUES (${id}, ${operation}, ${quantite}, ${raison || 'ajustement_manuel'})
+      `;
+    } else {
+      return Response.json({ error: 'nouveau_stock ou (quantite + operation) requis' }, { status: 400 });
+    }
+
+    return Response.json({ success: true, data: updated });
+  } catch (error) {
+    return Response.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+// ─── DELETE : supprimer une matière ─────────────────────────
+export async function DELETE(req) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return Response.json({ error: 'id requis' }, { status: 400 });
+    await sql`DELETE FROM matieres_premieres WHERE id = ${id}`;
+    return Response.json({ success: true });
+  } catch (error) {
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }
