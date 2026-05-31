@@ -1,11 +1,8 @@
-import NextAuth from 'next-auth';
+import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 
-const ROLES_VALIDES = ['admin', 'livreur', 'responsable_production', 'fournisseur', 'client'];
-
-// Redirection par rôle
 export const ROLE_REDIRECTS: Record<string, string> = {
   admin:                   '/admin',
   livreur:                 '/livreur',
@@ -14,13 +11,13 @@ export const ROLE_REDIRECTS: Record<string, string> = {
   client:                  '/',
 };
 
-const handler = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email:    { label: 'Email',          type: 'email'    },
-        password: { label: 'Mot de passe',   type: 'password' },
+        email:    { label: 'Email',        type: 'email'    },
+        password: { label: 'Mot de passe', type: 'password' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
@@ -36,12 +33,24 @@ const handler = NextAuth({
         const passwordMatch = await bcrypt.compare(credentials.password, user.mot_de_passe);
         if (!passwordMatch) return null;
 
-        // Enregistrer la connexion dans la traçabilité
         try {
           await sql`
             INSERT INTO tracabilite (entite_type, entite_id, action, nouvel_etat, utilisateur_id, utilisateur_nom)
             VALUES ('utilisateur', ${user.id}, 'connexion', 'connecte', ${user.id}, ${user.nom})
           `;
+
+          if (['admin', 'responsable_production'].includes(user.role)) {
+            await sql`
+              INSERT INTO notifications (titre, message, type, entite_type, entite_id)
+              VALUES (
+                ${`Connexion — ${user.nom}`},
+                ${`${user.role} connecté`},
+                'info',
+                'utilisateur',
+                ${user.id}
+              )
+            `;
+          }
         } catch { /* non bloquant */ }
 
         return {
@@ -73,6 +82,7 @@ const handler = NextAuth({
 
   pages: { signIn: '/login' },
   secret: process.env.NEXTAUTH_SECRET,
-});
+};
 
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };

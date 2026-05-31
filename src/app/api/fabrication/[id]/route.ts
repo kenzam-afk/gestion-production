@@ -1,10 +1,20 @@
 import sql from '@/lib/db';
+import { onFabricationDemarree, onFabricationTerminee } from '@/lib/tracker';
 
-// ─── PUT /api/fabrication/[id] ───────────────────────────────
 export async function PUT(req, { params }) {
   try {
-    const { id }     = params;
+    const { id } = await params;
     const { statut } = await req.json();
+
+    const [ordre] = await sql`
+      SELECT
+        o.quantite,
+        o.statut AS statut_actuel,
+        p.nom AS produit_nom
+      FROM ordres_fabrication o
+      JOIN produits p ON p.id = o.produit_id
+      WHERE o.id = ${id}
+    `;
 
     const [updated] = await sql`
       UPDATE ordres_fabrication
@@ -17,6 +27,16 @@ export async function PUT(req, { params }) {
     `;
 
     if (!updated) return Response.json({ error: 'Ordre introuvable' }, { status: 404 });
+
+    if (ordre) {
+      if (statut === 'en_cours') {
+        await onFabricationDemarree(Number(id), ordre.produit_nom, ordre.quantite);
+      }
+      if (statut === 'termine') {
+        await onFabricationTerminee(Number(id), ordre.produit_nom, ordre.quantite);
+      }
+    }
+
     return Response.json(updated);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

@@ -1,11 +1,24 @@
 import sql from '@/lib/db';
+import { onDemandeApproConfirmee, onDemandeApproExpediee } from '@/lib/tracker';
 
-// ─── PUT /api/fournisseur/demandes/[id] ──────────────────────
-// Changer statut : confirmee | expediee
+// ─── PUT /api/fournisseur/demande/[id] ────────────────────────
 export async function PUT(req, { params }) {
   try {
     const { id }     = params;
     const { statut } = await req.json();
+
+    // Récupérer infos avant update
+    const [demande] = await sql`
+      SELECT
+        da.matiere_id,
+        da.quantite,
+        mp.titre AS matiere_titre,
+        f.nom    AS fournisseur_nom
+      FROM demandes_appro da
+      JOIN matieres_premieres mp ON mp.id = da.matiere_id
+      JOIN fournisseurs        f  ON f.id  = da.fournisseur_id
+      WHERE da.id = ${id}
+    `;
 
     const [updated] = await sql`
       UPDATE demandes_appro
@@ -14,26 +27,25 @@ export async function PUT(req, { params }) {
       RETURNING *
     `;
 
-    // Traçabilité
-    await sql`
-      INSERT INTO tracabilite (entite_type, entite_id, action, nouvel_etat, details)
-      VALUES ('demande_appro', ${id}, 'changement_statut', ${statut}, ${'Fournisseur: ' + statut})
-    `;
+    if (!updated) return Response.json({ error: 'Demande introuvable' }, { status: 404 });
 
-    // Alerte admin si expédiée
-    if (statut === 'expediee') {
-      const [da] = await sql`
-        SELECT da.*, mp.titre FROM demandes_appro da
-        JOIN matieres_premieres mp ON mp.id = da.matiere_id
-        WHERE da.id = ${id}
-      `;
-      await sql`
-        INSERT INTO alertes (type, niveau, titre, message, entite_type, entite_id)
-        VALUES ('appro', 'info',
-          ${'Livraison en route — ' + da.titre},
-          ${'Quantité expédiée : ' + da.quantite + ' — Réception attendue prochainement'},
-          'demande_appro', ${id})
-      `;
+    // Tracker selon le statut
+    if (demande) {
+      if (statut === 'confirmee') {
+        await onDemandeApproConfirmee(Number(id), demande.matiere_titre, demande.fournisseur_nom);
+      }
+      if (statut === 'expediee') {
+        await onDemandeApproExpediee(Number(id), demande.matiere_titre, demande.fournisseur_nom);
+
+        // Alerte admin
+        await sql`
+          INSERT INTO alertes (type, niveau, titre, message, entite_type, entite_id)
+          VALUES ('appro', 'info',
+            ${`Livraison en route — ${demande.matiere_titre}`},
+            ${`Quantité expédiée : ${demande.quantite} — Réception attendue prochainement`},
+            'demande_appro', ${id})
+        `;
+      }
     }
 
     return Response.json(updated);
