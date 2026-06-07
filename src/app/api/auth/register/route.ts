@@ -30,27 +30,41 @@ export async function POST(request: Request) {
       RETURNING id
     `;
 
-    // 2. Créer client lié
-    await sql`
-      INSERT INTO clients (
-        utilisateur_id, nom, prenom, email, telephone, adresse,
-        type_client, titre, nin, nif, date_naissance, annee_creation, siege_social
-      ) VALUES (
-        ${user.id},
-        ${nom},
-        ${prenom || ''},
-        ${email},
-        ${telephone || ''},
-        ${adresse || ''},
-        ${type_client || 'individuel'},
-        ${titre || null},
-        ${nin || null},
-        ${nif || null},
-        ${date_naissance || null},
-        ${annee_creation || null},
-        ${siege_social || null}
-      )
+    // 2. Vérifier si un client avec ce même email existe déjà → le lier
+    const clientExistant = await sql`
+      SELECT id FROM clients WHERE email = ${email} AND utilisateur_id IS NULL
     `;
+
+    if (clientExistant.length > 0) {
+      // Lier le client existant à ce nouvel utilisateur
+      await sql`
+        UPDATE clients 
+        SET utilisateur_id = ${user.id}
+        WHERE email = ${email} AND utilisateur_id IS NULL
+      `;
+    } else {
+      // 3. Créer un nouveau client lié
+      await sql`
+        INSERT INTO clients (
+          utilisateur_id, nom, prenom, email, telephone, adresse,
+          type_client, titre, nin, nif, date_naissance, annee_creation, siege_social
+        ) VALUES (
+          ${user.id},
+          ${nom},
+          ${prenom || ''},
+          ${email},
+          ${telephone || ''},
+          ${adresse || ''},
+          ${type_client || 'individuel'},
+          ${titre || null},
+          ${nin || null},
+          ${nif || null},
+          ${date_naissance || null},
+          ${annee_creation || null},
+          ${siege_social || null}
+        )
+      `;
+    }
 
     return Response.json({ id: user.id, message: 'Compte créé avec succès' }, { status: 201 });
 
