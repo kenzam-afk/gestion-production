@@ -44,7 +44,10 @@ export async function GET(req, { params }) {
 export async function PUT(req, { params }) {
   try {
     const { id } = await params;
-    const { statut } = await req.json();
+    const body = await req.json();
+    const { statut, livreur_id, date_livraison, raison_echec } = body;
+
+    console.log('PUT livraison', id, '→ body:', body);
 
     const [avant] = await sql`
       SELECT
@@ -62,11 +65,27 @@ export async function PUT(req, { params }) {
       WHERE l.id = ${id}
     `;
 
+    // Calculer le livreur_id final
+    let livreurIdFinal: number | null = null;
+    if (livreur_id !== undefined && livreur_id !== null && livreur_id !== '') {
+      livreurIdFinal = Number(livreur_id);
+    } else if (livreur_id === undefined) {
+      // Pas envoyé dans le body → garder l'existant
+      livreurIdFinal = avant?.livreur_id ?? null;
+    } else {
+      // livreur_id = null ou '' → désassigner
+      livreurIdFinal = null;
+    }
+
+    console.log('livreurIdFinal:', livreurIdFinal);
+
     const [livraison] = await sql`
       UPDATE livraisons
       SET
         statut         = ${statut},
-        date_livraison = CASE WHEN ${statut} = 'livree' THEN CURRENT_DATE ELSE date_livraison END
+        livreur_id     = ${livreurIdFinal},
+        date_livraison = CASE WHEN ${statut} = 'livree' THEN CURRENT_DATE ELSE date_livraison END,
+        raison_echec   = ${raison_echec !== undefined ? raison_echec : null}
       WHERE id = ${id}
       RETURNING *
     `;
@@ -96,6 +115,7 @@ export async function PUT(req, { params }) {
 
     return Response.json(livraison);
   } catch (error) {
+    console.error('PUT livraison error:', error);
     return Response.json({ error: String(error) }, { status: 500 });
   }
 }

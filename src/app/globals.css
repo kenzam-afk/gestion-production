@@ -1,58 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
-/* ── Mode Clair (défaut) ── */
+/* ── DARK MODE FIXE — pas de light mode ── */
 :root {
-  --bg-base:        #f8fafc;
-  --bg-surface:     #ffffff;
-  --bg-card:        #ffffff;
-  --bg-card-hover:  #f1f5f9;
-  --bg-glass:       rgba(255,255,255,0.8);
-
-  --violet:         #7c3aed;
-  --violet-light:   #a855f7;
-  --rose:           #ec4899;
-  --rose-light:     #f472b6;
-  --cyan:           #06b6d4;
-  --cyan-light:     #22d3ee;
-
-  --grad-primary:   linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
-  --grad-secondary: linear-gradient(135deg, #06b6d4 0%, #7c3aed 100%);
-
-  --border:         rgba(0,0,0,0.08);
-  --border-accent:  rgba(124,58,237,0.3);
-
-  --text-primary:   #0f172a;
-  --text-secondary: #475569;
-  --text-muted:     #94a3b8;
-
-  --success:        #10b981;
-  --warning:        #f59e0b;
-  --danger:         #ef4444;
-  --info:           #06b6d4;
-
-  --background: var(--bg-base);
-  --foreground: var(--text-primary);
-}
-
-/* ── Mode Sombre (automatique selon l'OS) ── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-base:        #080812;
-    --bg-surface:     #0f0f23;
-    --bg-card:        #13132a;
-    --bg-card-hover:  #1a1a35;
-    --bg-glass:       rgba(255,255,255,0.04);
-
-    --border:         rgba(255,255,255,0.07);
-    --border-accent:  rgba(124,58,237,0.4);
-
-    --text-primary:   #f1f0ff;
-    --text-secondary: #a09dc0;
-    --text-muted:     #5c5a7a;
-
-    --background: var(--bg-base);
-    --foreground: var(--text-primary);
-  }
+  --bg-base:       #080812;
+  --bg-card:       #0f0f23;
+  --bg-surface:    #13132a;
+  --bg-card-hover: #1a1a35;
+  --border:        rgba(255,255,255,0.08);
+  --text-primary:  #f1f0ff;
+  --text-secondary:#a09dc0;
+  --text-muted:    #5c5a7a;
+  --violet:        #7c3aed;
+  --violet-light:  #c4b5fd;
+  --rose:          #ec4899;
+  --cyan:          #06b6d4;
+  --background:    #080812;
+  --foreground:    #f1f0ff;
 }
 
 @theme inline {
@@ -66,20 +30,9 @@ html { scroll-behavior: smooth; }
 body {
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'Outfit', 'DM Sans', system-ui, sans-serif;
+  font-family: 'Outfit', system-ui, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
-  transition: background 0.3s, color 0.3s;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-image:
-      radial-gradient(ellipse at 20% 0%, rgba(124,58,237,0.15) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 100%, rgba(236,72,153,0.1) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 50%, rgba(6,182,212,0.05) 0%, transparent 70%);
-    background-attachment: fixed;
-  }
 }
 
 input, textarea, select {
@@ -95,60 +48,11 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 0 0 3px rgba(124,58,237,0.15) !important;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-surface); }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
 ::-webkit-scrollbar-thumb { background: var(--violet); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--violet-light); }
 
-.gradient-text {
-  background: var(--grad-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.card-dark {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  transition: all 0.2s ease;
-}
-
-.card-dark:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-accent);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(124,58,237,0.15);
-}
-
-/* Animations */
-@keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-@keyframes glow-pulse { 0%,100%{box-shadow:0 0 20px rgba(124,58,237,0.3)} 50%{box-shadow:0 0 40px rgba(124,58,237,0.6),0 0 80px rgba(236,72,153,0.2)} }
-@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-@keyframes float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-8px)} }
-@keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
-
-.animate-fadeInUp { animation: fadeInUp 0.5s ease forwards; }
-.animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
-.animate-float { animation: float 3s ease-in-out infinite; }
-.spin { animation: spin 1s linear infinite; }
-/* ── Override global pour toutes les pages admin ── */
-
-/* Tableaux */
-table { background: var(--bg-card) !important; }
-thead tr { background: var(--bg-surface) !important; }
-thead th { color: var(--text-secondary) !important; }
-tbody td { color: var(--text-primary) !important; border-color: var(--border) !important; }
-tbody tr:hover td { background: var(--bg-card-hover) !important; }
-
-/* Cartes et panels */
-.card, .panel, .stat-card {
-  background: var(--bg-card) !important;
-  border-color: var(--border) !important;
-  color: var(--text-primary) !important;
-}
-
-/* Tous les divs avec fond blanc codé en dur */
+/* ── Override inline styles ── */
 [style*="background: white"],
 [style*="background: #fff"],
 [style*="background: #ffffff"],
@@ -159,11 +63,11 @@ tbody tr:hover td { background: var(--bg-card-hover) !important; }
 
 [style*="background: #f8fafc"],
 [style*="background: #f1f5f9"],
-[style*="background: #f0f4f8"] {
+[style*="background: #f0f4f8"],
+[style*="background: #f8f9fa"] {
   background: var(--bg-surface) !important;
 }
 
-/* Textes noirs */
 [style*="color: #0f172a"],
 [style*="color: #1e293b"],
 [style*="color: #334155"] {
@@ -176,9 +80,30 @@ tbody tr:hover td { background: var(--bg-card-hover) !important; }
   color: var(--text-secondary) !important;
 }
 
-/* Bordures claires */
 [style*="border: 1px solid #f1f5f9"],
 [style*="border: 1px solid #e2e8f0"],
 [style*="border-color: #e2e8f0"] {
   border-color: var(--border) !important;
 }
+
+table { background: var(--bg-card) !important; }
+thead tr { background: var(--bg-surface) !important; }
+thead th { color: var(--text-secondary) !important; }
+tbody td { color: var(--text-primary) !important; border-color: var(--border) !important; }
+tbody tr:hover td { background: var(--bg-card-hover) !important; }
+
+/* ── Tailwind dark overrides ── */
+.bg-white { background: var(--bg-card) !important; }
+.bg-gray-50, .bg-gray-100 { background: var(--bg-surface) !important; }
+.bg-gray-800, .bg-gray-900 { background: var(--bg-base) !important; }
+.text-gray-800, .text-gray-900 { color: var(--text-primary) !important; }
+.text-gray-400, .text-gray-500, .text-gray-600 { color: var(--text-secondary) !important; }
+.border-gray-200, .border-b { border-color: var(--border) !important; }
+.shadow, .shadow-sm { box-shadow: 0 1px 8px rgba(0,0,0,0.4) !important; }
+.rounded-xl, .rounded-3xl { border-color: var(--border); }
+
+/* Animations */
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.spin { animation: spin 1s linear infinite; }

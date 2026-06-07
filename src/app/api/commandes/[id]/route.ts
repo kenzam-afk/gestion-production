@@ -66,6 +66,45 @@ export async function PUT(req, { params }) {
       LIMIT 1
     `;
 
+    // ── Vérification matières premières avant fabrication ────
+    if (statut === 'en_fabrication') {
+      const lignes = await sql`SELECT * FROM commande_produits WHERE commande_id = ${id}`;
+      const matieres_manquantes = [];
+
+      for (const ligne of lignes) {
+        const matieres = await sql`
+          SELECT
+            pm.quantite_necessaire,
+            mp.titre,
+            mp.stock_actuel,
+            mp.unite,
+            (pm.quantite_necessaire * ${ligne.quantite}) AS quantite_requise
+          FROM produit_matieres pm
+          JOIN matieres_premieres mp ON mp.id = pm.matiere_id
+          WHERE pm.produit_id = ${ligne.produit_id}
+        `;
+        for (const m of matieres) {
+          if (Number(m.stock_actuel) < Number(m.quantite_requise)) {
+            matieres_manquantes.push({
+              matiere:          m.titre,
+              stock_actuel:     m.stock_actuel,
+              quantite_requise: m.quantite_requise,
+              manque:           Number(m.quantite_requise) - Number(m.stock_actuel),
+              unite:            m.unite,
+            });
+          }
+        }
+      }
+
+      if (matieres_manquantes.length > 0) {
+        return Response.json({
+          error: `Matières premières insuffisantes pour lancer la fabrication`,
+          matieres_manquantes,
+          code: 'MATIERES_INSUFFISANTES',
+        }, { status: 400 });
+      }
+    }
+
     const [commande] = await sql`
       UPDATE commandes SET statut = ${statut}, updated_at = NOW()
       WHERE id = ${id}
@@ -94,7 +133,6 @@ export async function PUT(req, { params }) {
         RETURNING *
       `;
 
-      // Bon de livraison automatique
       const annee  = new Date().getFullYear();
       const numero = String(livraison.id).padStart(4, '0');
       const numBon = `BL-${annee}-${numero}`;
@@ -104,7 +142,6 @@ export async function PUT(req, { params }) {
         VALUES (${livraison.id}, ${id}, ${numBon}, CURRENT_DATE)
       `;
 
-      // Tracker
       const clientNomLiv = avant?.type_client === 'entreprise'
         ? avant?.titre
         : `${avant?.prenom || ''} ${avant?.nom || ''}`.trim();
@@ -121,10 +158,7 @@ export async function PUT(req, { params }) {
 
     // ── Modifier livreur si livraison existe déjà ────────────
     if (statut === 'pret_livraison' && avant?.livraison_id && livreur_id) {
-      await sql`
-        UPDATE livraisons SET livreur_id = ${livreur_id}
-        WHERE id = ${avant.livraison_id}
-      `;
+      await sql`UPDATE livraisons SET livreur_id = ${livreur_id} WHERE id = ${avant.livraison_id}`;
     }
 
     // ── Remettre stock si annulée ────────────────────────────

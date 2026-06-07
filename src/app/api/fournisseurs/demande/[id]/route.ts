@@ -4,7 +4,7 @@ import { onDemandeApproConfirmee, onDemandeApproExpediee } from '@/lib/tracker';
 // ─── PUT /api/fournisseur/demande/[id] ────────────────────────
 export async function PUT(req, { params }) {
   try {
-    const { id }     = params;
+    const { id }     = await params;
     const { statut } = await req.json();
 
     // Récupérer infos avant update

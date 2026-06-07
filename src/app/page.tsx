@@ -7,7 +7,7 @@ import {
   ShoppingCart, Package, LogIn, X, MapPin, Search,
   UserPlus, Building2, User, ChevronRight, Star,
   Shield, Truck, Award, ArrowRight, Eye, EyeOff,
-  CheckCircle, AlertCircle, Minus, Plus, Trash2, Zap, Sparkles,
+  CheckCircle, AlertCircle, Minus, Plus, Trash2, Zap,
 } from 'lucide-react';
 
 type PanierItem = { produit: any; quantite: number };
@@ -37,7 +37,8 @@ export default function Home() {
   const [commandeEnvoyee, setCommandeEnvoyee] = useState(false);
   const [commandeId, setCommandeId] = useState<number | null>(null);
   const [commandeLoading, setCommandeLoading] = useState(false);
-  const [infoClient, setInfoClient] = useState({ prenom: '', nom: '', telephone: '', email: '', adresse: '', latitude: '', longitude: '' });
+  const [commandeErreur, setCommandeErreur] = useState('');
+  const [infoClient, setInfoClient] = useState({ prenom: '', nom: '', telephone: '', email: '', adresse: '' });
   const [locLoading, setLocLoading] = useState(false);
   const [typeClient, setTypeClient] = useState<TypeClient>('individuel');
   const [registerStep, setRegisterStep] = useState<1 | 2>(1);
@@ -85,17 +86,33 @@ export default function Home() {
   async function handleRegister() {
     setRegisterLoading(true); setRegisterError('');
     try {
-      const resUser = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nom: typeClient === 'individuel' ? `${regPrenom} ${regNom}` : regTitre, email: regEmail, mot_de_passe: regPwd, role: 'client' }) });
-      const dataUser = await resUser.json();
-      if (!resUser.ok) throw new Error(dataUser.error || 'Erreur inscription');
-      await fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ utilisateur_id: dataUser.id, type_client: typeClient, email: regEmail, telephone: regTel, adresse: regAdresse, nom: regNom, prenom: regPrenom, date_naissance: regDOB || null, nin: regNin || null, titre: regTitre || null, nif: regNif || null, annee_creation: regAnnee ? parseInt(regAnnee) : null, siege_social: regSiege || null }) });
+      const nomComplet = typeClient === 'individuel' ? `${regPrenom} ${regNom}`.trim() : regTitre;
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: nomComplet, prenom: regPrenom, email: regEmail,
+          mot_de_passe: regPwd, telephone: regTel, adresse: regAdresse,
+          type_client: typeClient,
+          titre: regTitre || null, nin: regNin || null, nif: regNif || null,
+          date_naissance: regDOB || null,
+          annee_creation: regAnnee ? parseInt(regAnnee) : null,
+          siege_social: regSiege || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur inscription');
       setRegisterSuccess(true);
     } catch (e: any) { setRegisterError(e.message); }
     setRegisterLoading(false);
   }
 
   function ajouterAuPanier(produit: any) {
-    setPanier(prev => { const e = prev.find(p => p.produit.id === produit.id); if (e) return prev.map(p => p.produit.id === produit.id ? { ...p, quantite: p.quantite + 1 } : p); return [...prev, { produit, quantite: 1 }]; });
+    setPanier(prev => {
+      const e = prev.find(p => p.produit.id === produit.id);
+      if (e) return prev.map(p => p.produit.id === produit.id ? { ...p, quantite: p.quantite + 1 } : p);
+      return [...prev, { produit, quantite: 1 }];
+    });
   }
   const setQte = (id: number, q: number) => { if (q < 1) return; setPanier(prev => prev.map(p => p.produit.id === id ? { ...p, quantite: q } : p)); };
   const supprimer = (id: number) => setPanier(prev => prev.filter(p => p.produit.id !== id));
@@ -105,9 +122,33 @@ export default function Home() {
   async function passerCommande() {
     if (!infoClient.prenom || !infoClient.nom || !infoClient.telephone) return;
     setCommandeLoading(true);
+    setCommandeErreur('');
     try {
-      const dc = await (await fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type_client: 'individuel', nom: infoClient.nom, prenom: infoClient.prenom, email: infoClient.email, telephone: infoClient.telephone, adresse: infoClient.adresse || 'Non renseignée' }) })).json();
-      const dCmd = await (await fetch('/api/commandes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: dc.id, produits: panier.map(p => ({ produit_id: p.produit.id, quantite: p.quantite, prix_unitaire: p.produit.prix_vente })) }) })).json();
+      const dc = await (await fetch('/api/clients', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type_client: 'individuel', nom: infoClient.nom, prenom: infoClient.prenom,
+          email: infoClient.email, telephone: infoClient.telephone,
+          adresse: infoClient.adresse || 'Non renseignée'
+        })
+      })).json();
+
+      const res = await fetch('/api/commandes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: dc.id,
+          produits: panier.map(p => ({ produit_id: p.produit.id, quantite: p.quantite, prix_unitaire: p.produit.prix_vente }))
+        })
+      });
+
+      const dCmd = await res.json();
+
+      if (!res.ok) {
+        setCommandeErreur(dCmd.error || 'Stock insuffisant pour cette commande');
+        setCommandeLoading(false);
+        return;
+      }
+
       setPanier([]); setCommandeId(dCmd.id); setCommandeEnvoyee(true);
     } finally { setCommandeLoading(false); }
   }
@@ -117,7 +158,7 @@ export default function Home() {
     setLocLoading(true);
     navigator.geolocation.getCurrentPosition(pos => {
       const lat = pos.coords.latitude.toFixed(6), lng = pos.coords.longitude.toFixed(6);
-      setInfoClient(p => ({ ...p, latitude: lat, longitude: lng, adresse: `Lat: ${lat}, Lng: ${lng}` }));
+      setInfoClient(p => ({ ...p, adresse: `Lat: ${lat}, Lng: ${lng}` }));
       setLocLoading(false);
     }, () => setLocLoading(false));
   }
@@ -152,7 +193,7 @@ export default function Home() {
         .inp::placeholder { color: rgba(255,255,255,0.3); }
         label { font-size: 12px; font-weight: 600; color: #a09dc0; margin-bottom: 5px; display: block; letter-spacing: 0.02em; }
         .overlay-d { position: fixed; inset: 0; background: rgba(4,4,20,0.85); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; animation: fadeIn 0.2s ease; }
-        .modal-d { background: #0f0f23; border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 32px; box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.1); animation: slideUp 0.25s ease; }
+        .modal-d { background: #0f0f23; border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 32px; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: slideUp 0.25s ease; }
         .modal-lg { max-width: 540px; }
         .close-btn { width: 32px; height: 32px; border-radius: 9px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; display: flex; align-items: center; justify-content: center; color: #a09dc0; transition: all 0.2s; flex-shrink: 0; }
         .close-btn:hover { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #fca5a5; }
@@ -180,20 +221,19 @@ export default function Home() {
         <div style={{ height: 2, background: 'linear-gradient(90deg, #7c3aed, #ec4899, #06b6d4, transparent)' }} />
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 66, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 11, background: 'linear-gradient(135deg,#7c3aed,#ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(124,58,237,0.5)', animation: 'pulse-glow 3s ease-in-out infinite', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,rgba(255,255,255,0.2),transparent)' }} />
-              <Package size={19} color="white" style={{ position: 'relative', zIndex: 1 }} />
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: 'linear-gradient(135deg,#7c3aed,#ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(124,58,237,0.5)', animation: 'pulse-glow 3s ease-in-out infinite' }}>
+              <Package size={19} color="white" />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#f1f0ff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>Gestion Pro</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#f1f0ff', letterSpacing: '-0.02em' }}>Gestion Pro</div>
               <div style={{ fontSize: 9, color: '#7c3aed', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Production & Livraison</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => setModal('register')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', borderRadius: 10, padding: '9px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit', sans-serif", transition: 'all 0.2s' }}>
+            <button onClick={() => setModal('register')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', borderRadius: 10, padding: '9px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit', sans-serif" }}>
               <UserPlus size={14} /> Créer un compte
             </button>
-            <button onClick={() => setModal('panier')} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, background: 'rgba(255,255,255,0.05)', cursor: 'pointer', color: '#a09dc0', transition: 'all 0.2s' }}>
+            <button onClick={() => setModal('panier')} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, background: 'rgba(255,255,255,0.05)', cursor: 'pointer', color: '#a09dc0' }}>
               <ShoppingCart size={17} />
               {totalItems > 0 && <span style={{ position: 'absolute', top: -6, right: -6, background: 'linear-gradient(135deg,#7c3aed,#ec4899)', color: 'white', fontSize: 9, fontWeight: 700, width: 17, height: 17, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #080812' }}>{totalItems}</span>}
             </button>
@@ -209,7 +249,6 @@ export default function Home() {
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 15% 50%, rgba(124,58,237,0.2) 0%, transparent 55%), radial-gradient(ellipse at 85% 20%, rgba(236,72,153,0.15) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(6,182,212,0.1) 0%, transparent 50%)' }} />
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
         <div style={{ position: 'absolute', top: '15%', right: '10%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%)', animation: 'float 6s ease-in-out infinite', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: '20%', right: '25%', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(236,72,153,0.1), transparent 70%)', animation: 'float 8s ease-in-out infinite reverse', pointerEvents: 'none' }} />
         <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative', zIndex: 1, width: '100%' }}>
           <div style={{ maxWidth: 660 }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 20, padding: '6px 14px', marginBottom: 24 }}>
@@ -258,17 +297,15 @@ export default function Home() {
         </div>
         {produits.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <div style={{ width: 64, height: 64, background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <Package size={28} color="#7c3aed" />
-            </div>
-            <p style={{ color: '#5c5a7a', fontSize: 14 }}>Aucun produit disponible pour le moment</p>
+            <Package size={40} style={{ display: 'block', margin: '0 auto 12px', opacity: 0.2, color: '#a855f7' }} />
+            <p style={{ color: '#5c5a7a', fontSize: 14 }}>Aucun produit disponible</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
             {produits.map(p => {
               const inPanier = panier.find(x => x.produit.id === p.id);
               const stockBas = p.stock_disponible <= p.stock_minimum;
-              const rupture = p.stock_disponible === 0;
+              const rupture  = p.stock_disponible === 0;
               return (
                 <div key={p.id} className="prod-card">
                   <div style={{ height: 3, background: rupture ? '#ef4444' : stockBas ? '#f59e0b' : 'linear-gradient(90deg,#7c3aed,#ec4899)' }} />
@@ -281,7 +318,7 @@ export default function Home() {
                         {rupture ? '● Rupture' : stockBas ? '⚠ Stock bas' : '✓ En stock'}
                       </span>
                     </div>
-                    <h3 style={{ fontWeight: 700, fontSize: 17, color: '#f1f0ff', marginBottom: 8, letterSpacing: '-0.01em' }}>{p.nom}</h3>
+                    <h3 style={{ fontWeight: 700, fontSize: 17, color: '#f1f0ff', marginBottom: 8 }}>{p.nom}</h3>
                     <p style={{ fontSize: 13, color: '#6b6890', marginBottom: 20, lineHeight: 1.6 }}>{p.description || 'Produit de qualité professionnelle'}</p>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
@@ -291,9 +328,17 @@ export default function Home() {
                         {p.stock_disponible > 0 && <div style={{ fontSize: 11, color: '#5c5a7a', marginTop: 3 }}>{p.stock_disponible} unités dispo.</div>}
                       </div>
                       {!rupture && (
-                        <button onClick={() => ajouterAuPanier(p)} className="btn-v" style={{ padding: '9px 16px', fontSize: 12.5 }}>
-                          {inPanier ? `× ${inPanier.quantite}` : <><Plus size={13} /> Ajouter</>}
-                        </button>
+                        inPanier ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button className="qty-btn" onClick={() => setQte(p.id, inPanier.quantite - 1)}><Minus size={11} /></button>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f0ff', minWidth: 20, textAlign: 'center' }}>{inPanier.quantite}</span>
+                            <button className="qty-btn" onClick={() => setQte(p.id, inPanier.quantite + 1)}><Plus size={11} /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => ajouterAuPanier(p)} className="btn-v" style={{ padding: '9px 16px', fontSize: 12.5 }}>
+                            <Plus size={13} /> Ajouter
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
@@ -304,13 +349,13 @@ export default function Home() {
         )}
       </div>
 
-      {/* MODAL CONNEXION — sans lien "Créer un compte" */}
+      {/* MODAL CONNEXION */}
       {modal === 'login' && (
         <div className="overlay-d" onClick={closeModal}>
           <div className="modal-d" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
               <div>
-                <h2 style={{ fontWeight: 800, fontSize: 22, color: '#f1f0ff', margin: 0, letterSpacing: '-0.02em' }}>Connexion</h2>
+                <h2 style={{ fontWeight: 800, fontSize: 22, color: '#f1f0ff', margin: 0 }}>Connexion</h2>
                 <p style={{ fontSize: 13, color: '#6b6890', marginTop: 4 }}>Accès à votre espace</p>
               </div>
               <button onClick={closeModal} className="close-btn"><X size={15} /></button>
@@ -332,10 +377,9 @@ export default function Home() {
                 </div>
               )}
               <button onClick={handleLogin} disabled={loginLoading} className="btn-v" style={{ width: '100%', justifyContent: 'center', padding: '13px', marginTop: 4 }}>
-                {loginLoading ? <><span className="spin" style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%' }} /> Connexion...</> : 'Se connecter'}
+                {loginLoading ? 'Connexion...' : 'Se connecter'}
               </button>
             </div>
-            {/* Pas de lien "Créer un compte" ici — réservé aux clients via la page d'accueil */}
           </div>
         </div>
       )}
@@ -350,14 +394,14 @@ export default function Home() {
                   <CheckCircle size={30} color="#10b981" />
                 </div>
                 <h3 style={{ fontWeight: 800, fontSize: 20, color: '#f1f0ff', marginBottom: 8 }}>Compte créé !</h3>
-                <p style={{ color: '#6b6890', fontSize: 14, marginBottom: 24 }}>Votre compte a été enregistré. Connectez-vous maintenant.</p>
+                <p style={{ color: '#6b6890', fontSize: 14, marginBottom: 24 }}>Votre compte a bien été enregistré. Connectez-vous maintenant.</p>
                 <button onClick={() => { setRegisterSuccess(false); setModal('login'); }} className="btn-v" style={{ padding: '12px 28px' }}>Se connecter</button>
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
                   <div>
-                    <h2 style={{ fontWeight: 800, fontSize: 22, color: '#f1f0ff', margin: 0, letterSpacing: '-0.02em' }}>Créer un compte</h2>
+                    <h2 style={{ fontWeight: 800, fontSize: 22, color: '#f1f0ff', margin: 0 }}>Créer un compte</h2>
                     <p style={{ fontSize: 13, color: '#6b6890', marginTop: 4 }}>Étape {registerStep} sur 2</p>
                   </div>
                   <button onClick={closeModal} className="close-btn"><X size={15} /></button>
@@ -386,7 +430,7 @@ export default function Home() {
                           <div><label>Prénom *</label><input className="inp" placeholder="Mohammed" value={regPrenom} onChange={e => setRegPrenom(e.target.value)} /></div>
                           <div><label>Nom *</label><input className="inp" placeholder="Benali" value={regNom} onChange={e => setRegNom(e.target.value)} /></div>
                         </div>
-                        <div><label>NIN</label><input className="inp" placeholder="Numéro d'identification" value={regNin} onChange={e => setRegNin(e.target.value)} /></div>
+                        <div><label>NIN</label><input className="inp" placeholder="Numéro d'identification nationale" value={regNin} onChange={e => setRegNin(e.target.value)} /></div>
                         <div><label>Date de naissance</label><input className="inp" type="date" value={regDOB} onChange={e => setRegDOB(e.target.value)} /></div>
                       </div>
                     ) : (
@@ -399,7 +443,8 @@ export default function Home() {
                         <div><label>Siège social</label><input className="inp" placeholder="Zone industrielle, Alger" value={regSiege} onChange={e => setRegSiege(e.target.value)} /></div>
                       </div>
                     )}
-                    <button onClick={() => setRegisterStep(2)} className="btn-v" style={{ width: '100%', justifyContent: 'center', marginTop: 20, padding: '13px' }}
+                    <button onClick={() => setRegisterStep(2)} className="btn-v"
+                      style={{ width: '100%', justifyContent: 'center', marginTop: 20, padding: '13px' }}
                       disabled={typeClient === 'individuel' ? !regPrenom || !regNom : !regTitre}>
                       Continuer <ChevronRight size={15} />
                     </button>
@@ -429,7 +474,8 @@ export default function Home() {
                     )}
                     <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                       <button onClick={() => setRegisterStep(1)} className="btn-ghost-v" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}>Retour</button>
-                      <button onClick={handleRegister} className="btn-v" style={{ flex: 2, justifyContent: 'center', padding: '12px' }} disabled={registerLoading || !regEmail || !regTel || !regPwd}>
+                      <button onClick={handleRegister} className="btn-v" style={{ flex: 2, justifyContent: 'center', padding: '12px' }}
+                        disabled={registerLoading || !regEmail || !regTel || !regPwd}>
                         {registerLoading ? 'Création...' : 'Créer mon compte'}
                       </button>
                     </div>
@@ -449,7 +495,7 @@ export default function Home() {
               <h2 style={{ fontWeight: 800, fontSize: 20, color: '#f1f0ff', margin: 0 }}>
                 Mon panier {totalItems > 0 && <span style={{ color: '#a855f7' }}>({totalItems})</span>}
               </h2>
-              <button onClick={() => { closeModal(); setCommandeEnvoyee(false); }} className="close-btn"><X size={15} /></button>
+              <button onClick={() => { closeModal(); setCommandeEnvoyee(false); setCommandeErreur(''); }} className="close-btn"><X size={15} /></button>
             </div>
             {commandeEnvoyee ? (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -458,7 +504,7 @@ export default function Home() {
                 </div>
                 <h3 style={{ fontWeight: 800, fontSize: 20, color: '#f1f0ff', marginBottom: 8 }}>Commande envoyée !</h3>
                 {commandeId && (
-                  <div style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 16, padding: '20px', margin: '16px 0' }}>
+                  <div style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 16, padding: 20, margin: '16px 0' }}>
                     <p style={{ fontSize: 12, color: '#6b6890', marginBottom: 6 }}>Numéro de commande</p>
                     <p style={{ fontSize: 40, fontWeight: 900, background: 'linear-gradient(135deg,#a855f7,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>#{commandeId}</p>
                     <p style={{ fontSize: 11, color: '#6b6890', marginTop: 6 }}>Conservez ce numéro pour le suivi</p>
@@ -480,7 +526,7 @@ export default function Home() {
                   <div style={{ marginBottom: 16 }}>
                     {panier.map(p => (
                       <div key={p.produit.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ width: 34, height: 34, background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <div style={{ width: 34, height: 34, background: 'rgba(124,58,237,0.12)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Package size={15} color="#a855f7" />
                         </div>
                         <div style={{ flex: 1 }}>
@@ -524,8 +570,17 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                  <button onClick={closeModal} className="btn-ghost-v" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}>Fermer</button>
+
+                {/* MESSAGE ERREUR STOCK */}
+                {commandeErreur && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '12px 14px', marginTop: 12 }}>
+                    <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#fca5a5', fontWeight: 500 }}>{commandeErreur}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                  <button onClick={() => { closeModal(); setCommandeErreur(''); }} className="btn-ghost-v" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}>Fermer</button>
                   <button onClick={passerCommande} className="btn-v" style={{ flex: 2, justifyContent: 'center', padding: '12px' }}
                     disabled={commandeLoading || panier.length === 0 || !infoClient.prenom || !infoClient.nom || !infoClient.telephone}>
                     {commandeLoading ? 'Envoi...' : `Commander — ${total.toLocaleString('fr-DZ')} DA`}
@@ -564,26 +619,25 @@ export default function Home() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
                     <p style={{ fontWeight: 800, fontSize: 18, color: '#f1f0ff', margin: 0 }}>Commande #{resultatSuivi.id}</p>
-                    <p style={{ fontSize: 13, color: '#6b6890', marginTop: 3 }}>Client : {resultatSuivi.client_nom}</p>
+                    <p style={{ fontSize: 13, color: '#6b6890', marginTop: 3 }}>{new Date(resultatSuivi.created_at).toLocaleDateString('fr-FR')}</p>
                   </div>
                   <span style={{ display: 'inline-flex', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: STATUT_COLORS[resultatSuivi.statut] + '18', color: STATUT_COLORS[resultatSuivi.statut], border: `1px solid ${STATUT_COLORS[resultatSuivi.statut]}40` }}>
                     {STATUT_LABELS[resultatSuivi.statut] || resultatSuivi.statut}
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6b6890', marginBottom: 20 }}>
-                  <span>Total : <strong style={{ color: '#a855f7' }}>{Number(resultatSuivi.total).toLocaleString('fr-DZ')} DA</strong></span>
-                  <span>{new Date(resultatSuivi.created_at).toLocaleDateString('fr-FR')}</span>
+                <div style={{ fontSize: 22, fontWeight: 800, background: 'linear-gradient(135deg,#a855f7,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 16 }}>
+                  {Number(resultatSuivi.total).toLocaleString('fr-DZ')} DA
                 </div>
                 {resultatSuivi.statut !== 'annulee' && (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                       {STATUT_ETAPES.map((etape, i) => {
-                        const idx = STATUT_ETAPES.indexOf(resultatSuivi.statut);
+                        const idx  = STATUT_ETAPES.indexOf(resultatSuivi.statut);
                         const done = i <= idx;
                         const labels: Record<string, string> = { en_attente: 'Reçue', confirmee: 'Confirmée', en_fabrication: 'Fabrication', livree: 'Livrée' };
                         return (
                           <div key={etape} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? 'linear-gradient(135deg,#7c3aed,#ec4899)' : 'rgba(255,255,255,0.06)', border: `1px solid ${done ? 'transparent' : 'rgba(255,255,255,0.1)'}`, color: done ? 'white' : '#6b6890', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, marginBottom: 6, boxShadow: done ? '0 0 12px rgba(124,58,237,0.4)' : 'none' }}>
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? 'linear-gradient(135deg,#7c3aed,#ec4899)' : 'rgba(255,255,255,0.06)', color: done ? 'white' : '#6b6890', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, marginBottom: 6, boxShadow: done ? '0 0 12px rgba(124,58,237,0.4)' : 'none' }}>
                               {done ? '✓' : i + 1}
                             </div>
                             <span style={{ fontSize: 9.5, color: done ? '#c4b5fd' : '#6b6890', fontWeight: done ? 600 : 400, textAlign: 'center' }}>{labels[etape]}</span>
@@ -597,7 +651,7 @@ export default function Home() {
                   </>
                 )}
                 {resultatSuivi.statut === 'annulee' && (
-                  <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '11px', textAlign: 'center' }}>
+                  <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: 11, textAlign: 'center' }}>
                     <p style={{ color: '#fca5a5', fontSize: 13, fontWeight: 600, margin: 0 }}>Cette commande a été annulée.</p>
                   </div>
                 )}
@@ -616,7 +670,7 @@ export default function Home() {
             </div>
             <span style={{ fontWeight: 700, color: '#f1f0ff', fontSize: 13 }}>Gestion Pro</span>
           </div>
-          <span style={{ fontSize: 11.5, color: '#3a3858' }}>PFE 2025 — Plateforme de gestion à la demande</span>
+          <span style={{ fontSize: 11.5, color: '#3a3858' }}>PFE 2025–2026 — Plateforme de gestion à la demande</span>
         </div>
       </footer>
     </div>

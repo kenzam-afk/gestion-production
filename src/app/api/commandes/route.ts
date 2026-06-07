@@ -1,6 +1,6 @@
 import sql from '@/lib/db';
 
-// ─── GET : liste toutes les commandes avec nom client ───────
+// ─── GET : liste toutes les commandes avec lignes ────────────
 export async function GET() {
   try {
     const rows = await sql`
@@ -10,25 +10,36 @@ export async function GET() {
         cl.prenom     AS client_prenom,
         cl.telephone  AS client_telephone,
         cl.adresse    AS client_adresse,
-        cl.type_client
+        cl.type_client,
+        cl.titre      AS client_titre
       FROM commandes c
       LEFT JOIN clients cl ON cl.id = c.client_id
       ORDER BY c.created_at DESC
     `;
-    return Response.json(rows);
+
+    const commandesAvecLignes = await Promise.all(
+      rows.map(async (cmd) => {
+        const lignes = await sql`
+          SELECT
+            cp.quantite, cp.prix_unitaire,
+            p.id   AS produit_id,
+            p.nom  AS produit_nom,
+            p.unite
+          FROM commande_produits cp
+          JOIN produits p ON p.id = cp.produit_id
+          WHERE cp.commande_id = ${cmd.id}
+        `;
+        return { ...cmd, lignes };
+      })
+    );
+
+    return Response.json(commandesAvecLignes);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
 // ─── POST : créer une commande ───────────────────────────────
-// Body attendu :
-// {
-//   client_id: number,
-//   produits: [{ produit_id, quantite, prix_unitaire }],
-//   adresse_livraison?: string,
-//   notes?: string
-// }
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -38,7 +49,7 @@ export async function POST(req) {
       return Response.json({ error: 'client_id et produits sont requis' }, { status: 400 });
     }
 
-    // ── 1. Vérifier le stock disponible pour chaque produit ──
+    // 1. Vérifier le stock disponible
     for (const ligne of produits) {
       const [produit] = await sql`
         SELECT id, nom, stock_disponible FROM produits WHERE id = ${ligne.produit_id}
@@ -55,8 +66,7 @@ export async function POST(req) {
       }
     }
 
-    // ── 2. Vérifier la faisabilité matières premières ────────
-    // Pour chaque produit commandé, vérifier si on a assez de matières
+    // 2. Vérifier la faisabilité matières premières
     const alertes_matieres = [];
     for (const ligne of produits) {
       const matieres = await sql`
@@ -71,7 +81,6 @@ export async function POST(req) {
         JOIN matieres_premieres mp ON mp.id = pm.matiere_id
         WHERE pm.produit_id = ${ligne.produit_id}
       `;
-
       for (const m of matieres) {
         if (Number(m.stock_actuel) < Number(m.quantite_requise)) {
           alertes_matieres.push({
@@ -85,19 +94,19 @@ export async function POST(req) {
       }
     }
 
-    // ── 3. Calculer le total ─────────────────────────────────
+    // 3. Calculer le total
     const total = produits.reduce(
       (acc, p) => acc + (Number(p.prix_unitaire) * Number(p.quantite)), 0
     );
 
-    // ── 4. Créer la commande ─────────────────────────────────
+    // 4. Créer la commande
     const [commande] = await sql`
       INSERT INTO commandes (client_id, statut, total, adresse_livraison, notes)
       VALUES (${client_id}, 'en_attente', ${total}, ${adresse_livraison || null}, ${notes || null})
       RETURNING *
     `;
 
-    // ── 5. Insérer les lignes de commande ────────────────────
+    // 5. Insérer les lignes
     for (const ligne of produits) {
       await sql`
         INSERT INTO commande_produits (commande_id, produit_id, quantite, prix_unitaire)
@@ -105,10 +114,10 @@ export async function POST(req) {
       `;
     }
 
-    // ── 6. Générer le bon de commande ────────────────────────
-    const annee   = new Date().getFullYear();
-    const numero  = String(commande.id).padStart(4, '0');
-    const numBon  = `BC-${annee}-${numero}`;
+    // 6. Générer le bon de commande
+    const annee  = new Date().getFullYear();
+    const numero = String(commande.id).padStart(4, '0');
+    const numBon = `BC-${annee}-${numero}`;
 
     const [bon] = await sql`
       INSERT INTO bons_commande (commande_id, numero_bon, date_emission, conditions_paiement)
@@ -116,29 +125,25 @@ export async function POST(req) {
       RETURNING *
     `;
 
-    // ── 7. Déduire le stock produits finis ───────────────────
+    // 7. Déduire le stock
     for (const ligne of produits) {
       await sql`
         UPDATE produits
         SET stock_disponible = stock_disponible - ${ligne.quantite}
         WHERE id = ${ligne.produit_id}
       `;
-
-      // Enregistrer le mouvement de stock
       await sql`
         INSERT INTO mouvements_stock (produit_id, type, quantite, raison, reference_id)
         VALUES (${ligne.produit_id}, 'sortie', ${ligne.quantite}, 'commande', ${commande.id})
       `;
     }
 
-    // ── 8. Réponse finale ────────────────────────────────────
     return Response.json({
       id: commande.id,
       total: commande.total,
       statut: commande.statut,
       numero_bon_commande: numBon,
       bon_commande_id: bon.id,
-      // Si des matières manquent, on prévient l'admin sans bloquer
       alertes_matieres: alertes_matieres.length > 0 ? alertes_matieres : null,
     }, { status: 201 });
 

@@ -5,9 +5,10 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
   Package, ShoppingCart, Clock, CheckCircle, Truck,
-  Factory, X, LogOut, RefreshCw,
+  Factory, X, LogOut, RefreshCw, Search,
   MapPin, Plus, Minus, Trash2, ArrowRight, AlertCircle,
 } from 'lucide-react';
+
 interface Commande {
   id: number; statut: string; total: number; created_at: string;
   adresse_livraison: string; livreur_nom: string | null;
@@ -48,6 +49,8 @@ body{margin:0;background:var(--bg-base)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-ghost{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:8px 16px;font-weight:500;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .15s}
 .btn-ghost:hover{border-color:var(--violet);color:var(--violet-light);background:rgba(124,58,237,.08)}
+.btn-cyan{display:inline-flex;align-items:center;gap:6px;background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.3);color:#06b6d4;border-radius:9px;padding:8px 16px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .15s}
+.btn-cyan:hover{background:rgba(6,182,212,.2)}
 .inp{width:100%;background:var(--bg-surface) !important;border:1px solid var(--border) !important;border-radius:9px;padding:10px 13px;font-family:'Outfit',sans-serif;font-size:13.5px;color:var(--text-primary) !important;outline:none;transition:all .15s}
 .inp:focus{border-color:var(--violet) !important;box-shadow:0 0 0 3px rgba(124,58,237,.15) !important}
 .card{background:var(--bg-card);border-radius:16px;border:1px solid var(--border)}
@@ -79,6 +82,13 @@ export default function ClientPage() {
   const [cmdLoading, setCmdLoading] = useState(false);
   const [cmdError, setCmdError]   = useState('');
 
+  // ── Suivi commande ───────────────────────────────────────
+  const [showSuivi, setShowSuivi]         = useState(false);
+  const [numeroSuivi, setNumeroSuivi]     = useState('');
+  const [suiviLoading, setSuiviLoading]   = useState(false);
+  const [suiviResult, setSuiviResult]     = useState<Commande | null>(null);
+  const [suiviError, setSuiviError]       = useState('');
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/');
     if (status === 'authenticated') {
@@ -106,6 +116,25 @@ export default function ClientPage() {
     if (Array.isArray(data)) setProduits(data);
   }
 
+  async function rechercherCommande() {
+    if (!numeroSuivi.trim()) { setSuiviError('Saisissez un numéro de commande'); return; }
+    setSuiviLoading(true); setSuiviError(''); setSuiviResult(null);
+    try {
+      const res = await fetch(`/api/commandes/${numeroSuivi.trim()}`);
+      if (!res.ok) { setSuiviError('Commande introuvable. Vérifiez le numéro.'); return; }
+      const data = await res.json();
+      setSuiviResult(data);
+    } catch (e: any) { setSuiviError('Erreur réseau'); }
+    finally { setSuiviLoading(false); }
+  }
+
+  function fermerSuivi() {
+    setShowSuivi(false);
+    setNumeroSuivi('');
+    setSuiviResult(null);
+    setSuiviError('');
+  }
+
   function ajouterAuPanier(produit: Produit) {
     setPanier(prev => {
       const e = prev.find(p => p.produit.id === produit.id);
@@ -131,7 +160,6 @@ export default function ClientPage() {
         if (cid) setClientId(cid);
       }
       if (!cid) { setCmdError('Impossible de trouver votre profil client.'); setCmdLoading(false); return; }
-
       const res = await fetch('/api/commandes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +203,10 @@ export default function ClientPage() {
           </div>
 
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            {/* Cloche notifications */}
+            {/* Bouton Suivi commande */}
+            <button onClick={() => setShowSuivi(true)} className="btn-cyan">
+              <Search size={14} /> Suivre ma commande
+            </button>
 
             <button onClick={() => setShowPanier(true)} style={{ position:'relative', display:'flex', alignItems:'center', gap:6, background:'rgba(124,58,237,.1)', border:'1px solid rgba(124,58,237,.25)', color:'var(--violet-light)', borderRadius:9, padding:'7px 14px', cursor:'pointer', fontSize:13, fontFamily:"'Outfit',sans-serif" }}>
               <ShoppingCart size={15} /><span>Panier</span>
@@ -230,7 +261,12 @@ export default function ClientPage() {
                 <p style={{ fontSize:12, color:'var(--text-muted)', margin:'2px 0 0' }}>Votre commande est en cours de traitement.</p>
               </div>
             </div>
-            <button onClick={() => setCommandeOk(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}><X size={16} /></button>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => { setNumeroSuivi(String(commandeOk)); setShowSuivi(true); }} className="btn-cyan" style={{ fontSize:12, padding:'6px 12px' }}>
+                <Search size={12}/> Suivre
+              </button>
+              <button onClick={() => setCommandeOk(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}><X size={16} /></button>
+            </div>
           </div>
         )}
 
@@ -246,7 +282,10 @@ export default function ClientPage() {
             {/* COMMANDES */}
             {activeTab === 'commandes' && (
               <div>
-                <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                  <button onClick={() => setShowSuivi(true)} className="btn-cyan" style={{ fontSize:12 }}>
+                    <Search size={13} /> Suivre une commande par numéro
+                  </button>
                   <button onClick={fetchCommandes} className="btn-ghost">
                     <RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }} /> Actualiser
                   </button>
@@ -265,8 +304,8 @@ export default function ClientPage() {
                 ) : (
                   <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                     {commandes.map(cmd => {
-                      const cfg     = STATUT_CFG[cmd.statut] || STATUT_CFG.en_attente;
-                      const Icon    = cfg.icon;
+                      const cfg      = STATUT_CFG[cmd.statut] || STATUT_CFG.en_attente;
+                      const Icon     = cfg.icon;
                       const etapeIdx = ETAPES.indexOf(cmd.statut);
                       return (
                         <div key={cmd.id} style={{ background:'var(--bg-surface)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden' }}>
@@ -284,9 +323,11 @@ export default function ClientPage() {
                                   {new Date(cmd.created_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' })}
                                 </div>
                               </div>
-                              <div style={{ textAlign:'right' }}>
+                              <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
                                 <div style={{ fontSize:18, fontWeight:800, color:'var(--violet-light)' }}>{Number(cmd.total).toLocaleString('fr-DZ')} DA</div>
-                                <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2 }}>{cmd.lignes?.length || 0} article{(cmd.lignes?.length||0)>1?'s':''}</div>
+                                <button onClick={() => { setNumeroSuivi(String(cmd.id)); setSuiviResult(null); setShowSuivi(true); }} className="btn-cyan" style={{ fontSize:11, padding:'4px 10px' }}>
+                                  <Search size={11}/> Suivre
+                                </button>
                               </div>
                             </div>
 
@@ -406,6 +447,137 @@ export default function ClientPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Modal Suivi commande ── */}
+      {showSuivi && (
+        <div className="overlay" onClick={fermerSuivi}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:500 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+              <div>
+                <h2 style={{ fontWeight:800, fontSize:18, color:'var(--text-primary)', margin:0 }}>Suivre ma commande</h2>
+                <p style={{ fontSize:12, color:'var(--text-muted)', marginTop:3 }}>Entrez votre numéro de commande</p>
+              </div>
+              <button onClick={fermerSuivi} style={{ width:28, height:28, borderRadius:8, background:'rgba(255,255,255,.06)', border:'1px solid var(--border)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-secondary)' }}><X size={14} /></button>
+            </div>
+
+            {/* Champ recherche */}
+            <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+              <input
+                className="inp"
+                style={{ flex:1 }}
+                type="number"
+                placeholder="Ex: 42"
+                value={numeroSuivi}
+                onChange={e => setNumeroSuivi(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && rechercherCommande()}
+                autoFocus
+              />
+              <button onClick={rechercherCommande} disabled={suiviLoading} className="btn-primary" style={{ padding:'0 16px', whiteSpace:'nowrap' }}>
+                {suiviLoading ? <span style={{ width:14, height:14, border:'2px solid rgba(255,255,255,.3)', borderTopColor:'white', borderRadius:'50%', display:'inline-block', animation:'spin 1s linear infinite' }}/> : <Search size={15}/>}
+              </button>
+            </div>
+
+            {/* Erreur */}
+            {suiviError && (
+              <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.25)', borderRadius:9, padding:'10px 12px', marginBottom:14 }}>
+                <AlertCircle size={14} color="#ef4444"/>
+                <span style={{ fontSize:13, color:'#ef4444' }}>{suiviError}</span>
+              </div>
+            )}
+
+            {/* Résultat */}
+            {suiviResult && (() => {
+              const cfg      = STATUT_CFG[suiviResult.statut] || STATUT_CFG.en_attente;
+              const Icon     = cfg.icon;
+              const etapeIdx = ETAPES.indexOf(suiviResult.statut);
+              return (
+                <div style={{ background:'var(--bg-surface)', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
+                  <div style={{ height:3, background:cfg.color }} />
+                  <div style={{ padding:'16px 18px' }}>
+                    {/* En-tête */}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
+                      <div>
+                        <div style={{ fontWeight:800, fontSize:17, color:'var(--text-primary)', marginBottom:4 }}>Commande #{suiviResult.id}</div>
+                        <div style={{ fontSize:12, color:'var(--text-muted)' }}>
+                          {new Date(suiviResult.created_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' })}
+                        </div>
+                      </div>
+                      <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:600, background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}` }}>
+                        <Icon size={12}/> {cfg.label}
+                      </span>
+                    </div>
+
+                    {/* Total */}
+                    <div style={{ fontSize:20, fontWeight:800, color:'var(--violet-light)', marginBottom:14 }}>
+                      {Number(suiviResult.total).toLocaleString('fr-DZ')} DA
+                    </div>
+
+                    {/* Produits */}
+                    {suiviResult.lignes && suiviResult.lignes.length > 0 && (
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 }}>
+                        {suiviResult.lignes.map((l, i) => (
+                          <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(124,58,237,.1)', border:'1px solid rgba(124,58,237,.2)', borderRadius:8, padding:'4px 10px', fontSize:12, color:'var(--violet-light)' }}>
+                            <Package size={11}/> {l.produit_nom} ×{l.quantite}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Progression */}
+                    {suiviResult.statut !== 'annulee' && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                          {ETAPES.map((etape, i) => {
+                            const done = i <= etapeIdx;
+                            return (
+                              <div key={etape} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1 }}>
+                                <div style={{ width:26, height:26, borderRadius:'50%', background:done?'var(--violet)':'var(--border)', color:done?'white':'var(--text-muted)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, marginBottom:4 }}>
+                                  {done?'✓':i+1}
+                                </div>
+                                <span style={{ fontSize:9, color:done?'var(--violet-light)':'var(--text-muted)', fontWeight:done?600:400, textAlign:'center' }}>{ETAPES_LABELS[etape]}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ height:5, background:'var(--border)', borderRadius:3, overflow:'hidden' }}>
+                          <div style={{ height:'100%', borderRadius:3, background:'linear-gradient(90deg,var(--violet),var(--rose))', width:`${Math.max(0,(etapeIdx/(ETAPES.length-1))*100)}%`, transition:'width .5s' }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Livreur + adresse */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:6, fontSize:12, color:'var(--text-secondary)' }}>
+                      {suiviResult.livreur_nom && (
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <Truck size={12} color="var(--cyan)"/>
+                          <span>Livreur : <strong style={{ color:'var(--text-primary)' }}>{suiviResult.livreur_nom}</strong></span>
+                        </div>
+                      )}
+                      {suiviResult.adresse_livraison && (
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <MapPin size={12} color="var(--text-muted)"/>
+                          <span>{suiviResult.adresse_livraison}</span>
+                        </div>
+                      )}
+                      {suiviResult.numero_bon_commande && (
+                        <span style={{ background:'rgba(124,58,237,.1)', color:'var(--violet-light)', padding:'3px 8px', borderRadius:6, fontSize:11, fontWeight:600, width:'fit-content' }}>
+                          {suiviResult.numero_bon_commande}
+                        </span>
+                      )}
+                    </div>
+
+                    {suiviResult.statut === 'annulee' && (
+                      <div style={{ marginTop:10, background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.25)', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#ef4444', fontWeight:500 }}>
+                        Cette commande a été annulée.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Modal Panier */}
       {showPanier && (

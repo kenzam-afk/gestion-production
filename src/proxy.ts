@@ -4,19 +4,26 @@ import { NextResponse } from "next/server";
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
-    const role = token?.role;
+    const role = token?.role as string;
+    const pathname = req.nextUrl.pathname;
 
-    // Définition des accès
-    const isAdmin = role === "admin";
-    const isResponsable = role === "responsable_production";
-
-    // Si l'utilisateur tente d'aller dans /admin
-    if (req.nextUrl.pathname.startsWith("/admin")) {
-      // On laisse passer l'admin OU le responsable de production
-      if (!isAdmin && !isResponsable) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
+    if (pathname.startsWith('/admin') && role !== 'admin') {
+      return NextResponse.redirect(new URL('/', req.url));
     }
+    if (pathname.startsWith('/production') && role !== 'responsable_production') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    if (pathname.startsWith('/fournisseur') && role !== 'fournisseur') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    if (pathname.startsWith('/livreur') && role !== 'livreur') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    if (pathname.startsWith('/client') && role !== 'client') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+
+    return NextResponse.next();
   },
   {
     callbacks: {
@@ -25,4 +32,6 @@ export default withAuth(
   }
 );
 
-export const config = { matcher: ["/admin/:path*", "/api/:path*"] };
+export const config = {
+  matcher: ['/admin/:path*', '/production/:path*', '/fournisseur/:path*', '/livreur/:path*', '/client/:path*'],
+};

@@ -41,8 +41,10 @@ export default function Livraisons() {
   const [livraisons, setLivraisons] = useState<Livraison[]>([]);
   const [livreurs, setLivreurs]     = useState<Livreur[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [saving, setSaving]         = useState(false);
   const [editModal, setEditModal]   = useState<Livraison | null>(null);
   const [livreurId, setLivreurId]   = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   async function fetchAll() {
     setLoading(true);
@@ -59,12 +61,31 @@ export default function Livraisons() {
 
   async function handleAssignerLivreur() {
     if (!editModal) return;
-    await fetch(`/api/livraisons/${editModal.id}`, {
+    setSaving(true);
+
+    const livreurIdEnvoi = livreurId ? parseInt(livreurId) : null;
+    console.log('Assignation livreur:', { livraison_id: editModal.id, livreur_id: livreurIdEnvoi });
+
+    const res = await fetch(`/api/livraisons/${editModal.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ statut: editModal.statut, livreur_id: livreurId ? parseInt(livreurId) : null }),
+      body: JSON.stringify({
+        statut:     editModal.statut,
+        livreur_id: livreurIdEnvoi,
+      }),
     });
+
+    const data = await res.json();
+    console.log('Réponse API:', data);
+
+    setSaving(false);
     setEditModal(null);
+
+    if (res.ok) {
+      setSuccessMsg('Livreur assigné avec succès !');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    }
+
     fetchAll();
   }
 
@@ -109,10 +130,17 @@ export default function Livraisons() {
           </p>
         </div>
         <button onClick={fetchAll} className="btn-ghost">
-          <span style={{ fontSize: 13 }}>↻</span>
           <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Actualiser
         </button>
       </div>
+
+      {/* Succès */}
+      {successMsg && (
+        <div style={{ background: 'rgba(16,185,129,.1)', border: '1px solid rgba(16,185,129,.25)', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <CheckCircle size={15} color="#10b981" />
+          <span style={{ fontSize: 13, color: '#10b981', fontWeight: 500 }}>{successMsg}</span>
+        </div>
+      )}
 
       {/* Info */}
       <div style={{ background: 'rgba(6,182,212,.08)', border: '1px solid rgba(6,182,212,.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -126,8 +154,8 @@ export default function Livraisons() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 20 }}>
         {[
           { label: 'Total',      value: stats.total,   color: '#06b6d4', bg: 'rgba(6,182,212,.1)',   border: 'rgba(6,182,212,.2)' },
-          { label: 'En attente', value: stats.attente,  color: '#f59e0b', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.2)' },
-          { label: 'Livrées',    value: stats.livrees,  color: '#10b981', bg: 'rgba(16,185,129,.1)', border: 'rgba(16,185,129,.2)' },
+          { label: 'En attente', value: stats.attente, color: '#f59e0b', bg: 'rgba(245,158,11,.1)',  border: 'rgba(245,158,11,.2)' },
+          { label: 'Livrées',    value: stats.livrees, color: '#10b981', bg: 'rgba(16,185,129,.1)',  border: 'rgba(16,185,129,.2)' },
         ].map((s, i) => (
           <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 14, padding: '18px 20px' }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -171,9 +199,14 @@ export default function Livraisons() {
                   </td>
                   <td style={{ padding: '13px 16px' }}>
                     {l.livreur_nom ? (
-                      <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{l.livreur_nom}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#06b6d4,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'white' }}>
+                          {l.livreur_nom[0]?.toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{l.livreur_nom}</span>
+                      </div>
                     ) : (
-                      <span style={{ fontSize: 12, color: '#f59e0b', fontStyle: 'italic' }}>Non assigné</span>
+                      <span style={{ fontSize: 12, color: '#f59e0b', fontStyle: 'italic' }}>⚠ Non assigné</span>
                     )}
                   </td>
                   <td style={{ padding: '13px 16px' }}>
@@ -186,16 +219,19 @@ export default function Livraisons() {
                   </td>
                   <td style={{ padding: '13px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {/* Assigner/modifier livreur */}
                       {l.statut !== 'livree' && (
-                        <button onClick={() => { setEditModal(l); setLivreurId(l.livreur_id ? String(l.livreur_id) : ''); }}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(124,58,237,.1)', border: '1px solid rgba(124,58,237,.25)', color: '#a855f7', borderRadius: 8, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>
+                        <button
+                          onClick={() => { setEditModal(l); setLivreurId(l.livreur_id ? String(l.livreur_id) : ''); }}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(124,58,237,.1)', border: '1px solid rgba(124,58,237,.25)', color: '#a855f7', borderRadius: 8, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}
+                        >
                           <Pencil size={12} /> Livreur
                         </button>
                       )}
                       {l.statut !== 'livree' && (
-                        <button onClick={() => handleLivrer(l.id)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(16,185,129,.1)', border: '1px solid rgba(16,185,129,.25)', color: '#10b981', borderRadius: 8, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>
+                        <button
+                          onClick={() => handleLivrer(l.id)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(16,185,129,.1)', border: '1px solid rgba(16,185,129,.25)', color: '#10b981', borderRadius: 8, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}
+                        >
                           <CheckCircle size={12} /> Livrer
                         </button>
                       )}
@@ -230,18 +266,33 @@ export default function Livraisons() {
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Livraison #{editModal.id} · Commande #{editModal.commande_id}</div>
             </div>
 
-            <div>
+            <div style={{ marginBottom: 6 }}>
               <label>Livreur assigné</label>
-              <select className="sel" value={livreurId} onChange={e => setLivreurId(e.target.value)}>
-                <option value="">Sans livreur assigné</option>
-                {livreurs.map(l => <option key={l.id} value={l.id}>{l.nom}</option>)}
+              <select
+                className="sel"
+                value={livreurId}
+                onChange={e => {
+                  console.log('Sélection livreur:', e.target.value);
+                  setLivreurId(e.target.value);
+                }}
+              >
+                <option value="">— Sans livreur assigné —</option>
+                {livreurs.map(l => (
+                  <option key={l.id} value={String(l.id)}>{l.nom}</option>
+                ))}
               </select>
             </div>
 
+            {livreurId && (
+              <div style={{ fontSize: 12, color: '#10b981', marginBottom: 14 }}>
+                ✓ {livreurs.find(l => String(l.id) === livreurId)?.nom} sera assigné
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button onClick={() => setEditModal(null)} className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>Annuler</button>
-              <button onClick={handleAssignerLivreur} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
-                Enregistrer
+              <button onClick={handleAssignerLivreur} disabled={saving} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
               </button>
             </div>
           </div>

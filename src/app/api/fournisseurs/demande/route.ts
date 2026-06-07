@@ -1,6 +1,5 @@
 import sql from '@/lib/db';
 
-// ─── GET /api/fournisseur/demande ────────────────────────────
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
@@ -10,7 +9,6 @@ export async function GET(req) {
       return Response.json({ error: 'utilisateur_id requis' }, { status: 400 });
     }
 
-    // Trouver le fournisseur lié à cet utilisateur
     const [fournisseur] = await sql`
       SELECT id FROM fournisseurs WHERE utilisateur_id = ${utilisateur_id}
     `;
@@ -38,8 +36,34 @@ export async function GET(req) {
   }
 }
 
-// ─── PUT /api/fournisseur/demande ────────────────────────────
-// Non utilisé ici, le PUT est sur [id]/route.ts
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { matiere_id, quantite, fournisseur_id, notes, date_prevue } = body;
+
+    if (!matiere_id || !quantite || !fournisseur_id) {
+      return Response.json({ error: 'matiere_id, quantite et fournisseur_id sont requis' }, { status: 400 });
+    }
+
+    const [demande] = await sql`
+      INSERT INTO demandes_appro (matiere_id, quantite, fournisseur_id, statut, notes, date_prevue)
+      VALUES (
+        ${matiere_id},
+        ${quantite},
+        ${fournisseur_id},
+        'en_attente',
+        ${notes || null},
+        ${date_prevue || null}
+      )
+      RETURNING *
+    `;
+
+    return Response.json(demande, { status: 201 });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function PUT(req) {
-  return Response.json({ error: 'Utilisez /api/fournisseur/demande/[id]' }, { status: 400 });
+  return Response.json({ error: 'Utilisez /api/fournisseurs/demande/[id]' }, { status: 400 });
 }
