@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const resultat = await calculerMRP();
     return Response.json(resultat);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
@@ -74,7 +74,7 @@ export async function POST() {
       message: `${plans_crees.length} plan(s) MRP créé(s)`,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
@@ -228,7 +228,7 @@ async function calculerMRP() {
 
   return {
     besoins,
-    commandes_concernees: [...new Set(commandes.map(c => c.id))],
+    commandes_concernees: Array.from(new Set(commandes.map((c: any) => c.id))),
     faisabilite_commandes,
     resume,
     calcule_le: new Date().toISOString(),

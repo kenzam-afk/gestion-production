@@ -1,6 +1,7 @@
 import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
 
-export async function GET(req) {
+export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const utilisateur_id   = searchParams.get('utilisateur_id');
@@ -18,11 +19,7 @@ export async function GET(req) {
     }
 
     const demandes = await sql`
-      SELECT
-        da.*,
-        mp.titre AS matiere_titre,
-        mp.unite AS matiere_unite,
-        f.nom    AS fournisseur_nom
+      SELECT da.*, mp.titre AS matiere_titre, mp.unite AS matiere_unite, f.nom AS fournisseur_nom
       FROM demandes_appro da
       JOIN matieres_premieres mp ON mp.id = da.matiere_id
       JOIN fournisseurs        f  ON f.id  = da.fournisseur_id
@@ -31,12 +28,12 @@ export async function GET(req) {
     `;
 
     return Response.json(demandes);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function POST(req) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { matiere_id, quantite, fournisseur_id, notes, date_prevue } = body;
@@ -47,23 +44,16 @@ export async function POST(req) {
 
     const [demande] = await sql`
       INSERT INTO demandes_appro (matiere_id, quantite, fournisseur_id, statut, notes, date_prevue)
-      VALUES (
-        ${matiere_id},
-        ${quantite},
-        ${fournisseur_id},
-        'en_attente',
-        ${notes || null},
-        ${date_prevue || null}
-      )
+      VALUES (${matiere_id}, ${quantite}, ${fournisseur_id}, 'en_attente', ${notes || null}, ${date_prevue || null})
       RETURNING *
     `;
 
     return Response.json(demande, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function PUT(req) {
+export async function PUT(req: NextRequest) {
   return Response.json({ error: 'Utilisez /api/fournisseurs/demande/[id]' }, { status: 400 });
 }

@@ -121,7 +121,7 @@ export async function GET() {
       },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
@@ -129,8 +129,7 @@ export async function GET() {
 // ─── POST /api/stock ─────────────────────────────────────────
 // Ajustement manuel du stock d'un produit ou d'une matière
 // Body: { type: 'produit'|'matiere', id, quantite, operation: 'entree'|'sortie'|'ajustement', raison }
-export async function POST(req) {
-  try {
+export async function POST(req: Request) {  try {
     const { type, id, quantite, operation, raison } = await req.json();
 
     if (!id || !quantite || !operation) {
@@ -171,7 +170,7 @@ export async function POST(req) {
       return Response.json({ error: 'type doit être "produit" ou "matiere"' }, { status: 400 });
     }
 
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }

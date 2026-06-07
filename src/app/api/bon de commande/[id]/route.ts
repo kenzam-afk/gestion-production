@@ -1,12 +1,10 @@
 import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
 
-// ─── GET /api/bons/commande/[id] ────────────────────────────
-// Retourne toutes les données nécessaires pour imprimer le bon
-export async function GET(req, { params }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
-    // Récupérer le bon de commande
     const [bon] = await sql`
       SELECT
         bc.*,
@@ -31,11 +29,8 @@ export async function GET(req, { params }) {
       WHERE bc.id = ${id}
     `;
 
-    if (!bon) {
-      return Response.json({ error: 'Bon de commande introuvable' }, { status: 404 });
-    }
+    if (!bon) return Response.json({ error: 'Bon de commande introuvable' }, { status: 404 });
 
-    // Lignes du bon
     const lignes = await sql`
       SELECT
         cp.quantite,
@@ -50,8 +45,7 @@ export async function GET(req, { params }) {
     `;
 
     return Response.json({ ...bon, lignes });
-
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,19 +1,15 @@
 import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
 import { onDemandeApproConfirmee, onDemandeApproExpediee } from '@/lib/tracker';
 
-// ─── PUT /api/fournisseur/demande/[id] ────────────────────────
-export async function PUT(req, { params }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id }     = await params;
     const { statut } = await req.json();
 
-    // Récupérer infos avant update
     const [demande] = await sql`
-      SELECT
-        da.matiere_id,
-        da.quantite,
-        mp.titre AS matiere_titre,
-        f.nom    AS fournisseur_nom
+      SELECT da.matiere_id, da.quantite,
+        mp.titre AS matiere_titre, f.nom AS fournisseur_nom
       FROM demandes_appro da
       JOIN matieres_premieres mp ON mp.id = da.matiere_id
       JOIN fournisseurs        f  ON f.id  = da.fournisseur_id
@@ -21,23 +17,18 @@ export async function PUT(req, { params }) {
     `;
 
     const [updated] = await sql`
-      UPDATE demandes_appro
-      SET statut = ${statut}, updated_at = NOW()
-      WHERE id = ${id}
-      RETURNING *
+      UPDATE demandes_appro SET statut = ${statut}, updated_at = NOW()
+      WHERE id = ${id} RETURNING *
     `;
 
     if (!updated) return Response.json({ error: 'Demande introuvable' }, { status: 404 });
 
-    // Tracker selon le statut
     if (demande) {
       if (statut === 'confirmee') {
         await onDemandeApproConfirmee(Number(id), demande.matiere_titre, demande.fournisseur_nom);
       }
       if (statut === 'expediee') {
         await onDemandeApproExpediee(Number(id), demande.matiere_titre, demande.fournisseur_nom);
-
-        // Alerte admin
         await sql`
           INSERT INTO alertes (type, niveau, titre, message, entite_type, entite_id)
           VALUES ('appro', 'info',
@@ -49,7 +40,7 @@ export async function PUT(req, { params }) {
     }
 
     return Response.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }

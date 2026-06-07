@@ -9,7 +9,7 @@ export async function GET() {
       ORDER BY id ASC
     `;
     return Response.json(fournisseurs);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }

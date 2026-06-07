@@ -1,7 +1,8 @@
 import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
 import { onStatutCommande, onNouvelleLivraison } from '@/lib/tracker';
 
-export async function GET(req, { params }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const [commande] = await sql`
@@ -34,12 +35,12 @@ export async function GET(req, { params }) {
     `;
 
     return Response.json({ ...commande, lignes, bon_commande: bon_commande || null, bon_livraison: bon_livraison || null });
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function PUT(req, { params }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await req.json();
@@ -66,10 +67,9 @@ export async function PUT(req, { params }) {
       LIMIT 1
     `;
 
-    // ── Vérification matières premières avant fabrication ────
     if (statut === 'en_fabrication') {
       const lignes = await sql`SELECT * FROM commande_produits WHERE commande_id = ${id}`;
-      const matieres_manquantes = [];
+      const matieres_manquantes: any[] = [];
 
       for (const ligne of lignes) {
         const matieres = await sql`
@@ -112,7 +112,6 @@ export async function PUT(req, { params }) {
     `;
     if (!commande) return Response.json({ error: 'Commande introuvable' }, { status: 404 });
 
-    // ── Créer ordres de fabrication ──────────────────────────
     if (statut === 'en_fabrication') {
       const lignes = await sql`SELECT * FROM commande_produits WHERE commande_id = ${id}`;
       for (const ligne of lignes) {
@@ -123,32 +122,23 @@ export async function PUT(req, { params }) {
       }
     }
 
-    // ── Créer livraison automatiquement quand prête ──────────
     if (statut === 'pret_livraison' && !avant?.livraison_id) {
       const adresse = avant?.client_adresse || '';
-
       const [livraison] = await sql`
         INSERT INTO livraisons (commande_id, livreur_id, adresse, statut)
         VALUES (${id}, ${livreur_id || null}, ${adresse}, 'en_attente')
         RETURNING *
       `;
 
-      const annee  = new Date().getFullYear();
-      const numero = String(livraison.id).padStart(4, '0');
-      const numBon = `BL-${annee}-${numero}`;
-
-      await sql`
-        INSERT INTO bons_livraison (livraison_id, commande_id, numero_bon, date_emission)
-        VALUES (${livraison.id}, ${id}, ${numBon}, CURRENT_DATE)
-      `;
+      const numBon = `BL-${new Date().getFullYear()}-${String(livraison.id).padStart(4, '0')}`;
+      await sql`INSERT INTO bons_livraison (livraison_id, commande_id, numero_bon, date_emission) VALUES (${livraison.id}, ${id}, ${numBon}, CURRENT_DATE)`;
 
       const clientNomLiv = avant?.type_client === 'entreprise'
         ? avant?.titre
         : `${avant?.prenom || ''} ${avant?.nom || ''}`.trim();
 
       await onNouvelleLivraison(
-        livraison.id,
-        Number(id),
+        livraison.id, Number(id),
         livreur_id ? Number(livreur_id) : undefined,
         undefined,
         clientNomLiv || undefined,
@@ -156,12 +146,10 @@ export async function PUT(req, { params }) {
       );
     }
 
-    // ── Modifier livreur si livraison existe déjà ────────────
     if (statut === 'pret_livraison' && avant?.livraison_id && livreur_id) {
       await sql`UPDATE livraisons SET livreur_id = ${livreur_id} WHERE id = ${avant.livraison_id}`;
     }
 
-    // ── Remettre stock si annulée ────────────────────────────
     if (statut === 'annulee') {
       const lignes = await sql`SELECT * FROM commande_produits WHERE commande_id = ${id}`;
       for (const ligne of lignes) {
@@ -170,16 +158,13 @@ export async function PUT(req, { params }) {
       }
     }
 
-    // ── Tracker statut commande ──────────────────────────────
     if (avant) {
       const clientNom = avant.type_client === 'entreprise'
         ? avant.titre
         : `${avant.prenom || ''} ${avant.nom || ''}`.trim();
 
       await onStatutCommande(
-        Number(id),
-        avant.statut,
-        statut,
+        Number(id), avant.statut, statut,
         clientNom || undefined,
         avant.client_user_id ? Number(avant.client_user_id) : undefined,
         avant.livreur_id ? Number(avant.livreur_id) : undefined,
@@ -187,17 +172,17 @@ export async function PUT(req, { params }) {
     }
 
     return Response.json(commande);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE(req, { params }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     await sql`DELETE FROM commandes WHERE id = ${id}`;
     return Response.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }

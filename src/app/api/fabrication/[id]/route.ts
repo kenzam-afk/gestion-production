@@ -1,7 +1,8 @@
 import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
 import { onFabricationDemarree, onFabricationTerminee } from '@/lib/tracker';
 
-export async function PUT(req, { params }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const { statut } = await req.json();
@@ -29,16 +30,12 @@ export async function PUT(req, { params }) {
     if (!updated) return Response.json({ error: 'Ordre introuvable' }, { status: 404 });
 
     if (ordre) {
-      if (statut === 'en_cours') {
-        await onFabricationDemarree(Number(id), ordre.produit_nom, ordre.quantite);
-      }
-      if (statut === 'termine') {
-        await onFabricationTerminee(Number(id), ordre.produit_nom, ordre.quantite);
-      }
+      if (statut === 'en_cours') await onFabricationDemarree(Number(id), ordre.produit_nom, ordre.quantite);
+      if (statut === 'termine')  await onFabricationTerminee(Number(id), ordre.produit_nom, ordre.quantite);
     }
 
     return Response.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
