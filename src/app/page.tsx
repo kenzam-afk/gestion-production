@@ -38,6 +38,8 @@ export default function Home() {
   const [commandeId, setCommandeId] = useState<number | null>(null);
   const [commandeLoading, setCommandeLoading] = useState(false);
   const [commandeErreur, setCommandeErreur] = useState('');
+  const [regPwdPanier, setRegPwdPanier] = useState('');
+  const [showPwdPanier, setShowPwdPanier] = useState(false);
   const [infoClient, setInfoClient] = useState({ prenom: '', nom: '', telephone: '', email: '', adresse: '' });
   const [locLoading, setLocLoading] = useState(false);
   const [typeClient, setTypeClient] = useState<TypeClient>('individuel');
@@ -121,36 +123,77 @@ export default function Home() {
 
   async function passerCommande() {
     if (!infoClient.prenom || !infoClient.nom || !infoClient.telephone) return;
+    if (!infoClient.email) { setCommandeErreur('Email requis pour créer votre compte'); return; }
+    if (!regPwdPanier) { setCommandeErreur('Mot de passe requis pour créer votre compte'); return; }
+
     setCommandeLoading(true);
     setCommandeErreur('');
     try {
-      const dc = await (await fetch('/api/clients', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      // 1. Créer le compte client avec mot de passe
+      const resRegister = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type_client: 'individuel', nom: infoClient.nom, prenom: infoClient.prenom,
-          email: infoClient.email, telephone: infoClient.telephone,
-          adresse: infoClient.adresse || 'Non renseignée'
+          nom:          infoClient.nom,
+          prenom:       infoClient.prenom,
+          email:        infoClient.email,
+          mot_de_passe: regPwdPanier,
+          telephone:    infoClient.telephone,
+          adresse:      infoClient.adresse || 'Non renseignée',
+          type_client:  'individuel',
         })
-      })).json();
+      });
 
+      const dataRegister = await resRegister.json();
+      let clientId: number;
+
+      if (!resRegister.ok) {
+        if (dataRegister.error?.includes('déjà utilisé')) {
+          // Client existe déjà → récupérer son id
+          const resClient = await fetch(`/api/clients?email=${encodeURIComponent(infoClient.email)}`);
+          const dataClient = await resClient.json();
+          if (!dataClient?.id) {
+            setCommandeErreur('Email déjà utilisé — connectez-vous pour commander');
+            setCommandeLoading(false);
+            return;
+          }
+          clientId = dataClient.id;
+        } else {
+          setCommandeErreur(dataRegister.error || 'Erreur création compte');
+          setCommandeLoading(false);
+          return;
+        }
+      } else {
+        // Récupérer le client lié au nouvel utilisateur
+        const resClient = await fetch(`/api/clients?email=${encodeURIComponent(infoClient.email)}`);
+        const dataClient = await resClient.json();
+        clientId = dataClient?.id;
+      }
+
+      // 2. Passer la commande
       const res = await fetch('/api/commandes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client_id: dc.id,
+          client_id: clientId,
           produits: panier.map(p => ({ produit_id: p.produit.id, quantite: p.quantite, prix_unitaire: p.produit.prix_vente }))
         })
       });
 
       const dCmd = await res.json();
-
       if (!res.ok) {
-        setCommandeErreur(dCmd.error || 'Stock insuffisant pour cette commande');
+        setCommandeErreur(dCmd.error || 'Erreur lors de la commande');
         setCommandeLoading(false);
         return;
       }
 
-      setPanier([]); setCommandeId(dCmd.id); setCommandeEnvoyee(true);
-    } finally { setCommandeLoading(false); }
+      setPanier([]);
+      setCommandeId(dCmd.id);
+      setCommandeEnvoyee(true);
+      setRegPwdPanier('');
+    } finally {
+      setCommandeLoading(false);
+    }
   }
 
   function obtenirLocalisation() {
@@ -495,7 +538,7 @@ export default function Home() {
               <h2 style={{ fontWeight: 800, fontSize: 20, color: '#f1f0ff', margin: 0 }}>
                 Mon panier {totalItems > 0 && <span style={{ color: '#a855f7' }}>({totalItems})</span>}
               </h2>
-              <button onClick={() => { closeModal(); setCommandeEnvoyee(false); setCommandeErreur(''); }} className="close-btn"><X size={15} /></button>
+              <button onClick={() => { closeModal(); setCommandeEnvoyee(false); setCommandeErreur(''); setRegPwdPanier(''); }} className="close-btn"><X size={15} /></button>
             </div>
             {commandeEnvoyee ? (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -503,6 +546,7 @@ export default function Home() {
                   <CheckCircle size={30} color="#10b981" />
                 </div>
                 <h3 style={{ fontWeight: 800, fontSize: 20, color: '#f1f0ff', marginBottom: 8 }}>Commande envoyée !</h3>
+                <p style={{ fontSize: 13, color: '#6b6890', marginBottom: 8 }}>Votre compte a été créé — connectez-vous avec votre email et mot de passe</p>
                 {commandeId && (
                   <div style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 16, padding: 20, margin: '16px 0' }}>
                     <p style={{ fontSize: 12, color: '#6b6890', marginBottom: 6 }}>Numéro de commande</p>
@@ -558,7 +602,21 @@ export default function Home() {
                       <div><label>Nom *</label><input className="inp" placeholder="Nom" value={infoClient.nom} onChange={e => setInfoClient(p => ({ ...p, nom: e.target.value }))} /></div>
                     </div>
                     <div><label>Téléphone *</label><input className="inp" type="tel" placeholder="0555 123 456" value={infoClient.telephone} onChange={e => setInfoClient(p => ({ ...p, telephone: e.target.value }))} /></div>
-                    <div><label>Email</label><input className="inp" type="email" placeholder="votre@email.com" value={infoClient.email} onChange={e => setInfoClient(p => ({ ...p, email: e.target.value }))} /></div>
+                    <div><label>Email *</label><input className="inp" type="email" placeholder="votre@email.com" value={infoClient.email} onChange={e => setInfoClient(p => ({ ...p, email: e.target.value }))} /></div>
+                    <div>
+                      <label>Mot de passe * <span style={{ fontSize: 10, color: '#6b6890', fontWeight: 400 }}>(pour accéder à votre espace client)</span></label>
+                      <div style={{ position: 'relative' }}>
+                        <input className="inp" type={showPwdPanier ? 'text' : 'password'}
+                          placeholder="Créez votre mot de passe"
+                          value={regPwdPanier}
+                          onChange={e => setRegPwdPanier(e.target.value)}
+                          style={{ paddingRight: 44 }} />
+                        <button onClick={() => setShowPwdPanier(!showPwdPanier)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b6890' }}>
+                          {showPwdPanier ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <p style={{ fontSize: 11, color: '#6b6890', marginTop: 4 }}>Votre compte sera créé automatiquement pour suivre vos commandes</p>
+                    </div>
                     <div>
                       <label>Adresse de livraison</label>
                       <div style={{ display: 'flex', gap: 8 }}>
@@ -571,7 +629,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* MESSAGE ERREUR STOCK */}
                 {commandeErreur && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '12px 14px', marginTop: 12 }}>
                     <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
@@ -580,9 +637,9 @@ export default function Home() {
                 )}
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                  <button onClick={() => { closeModal(); setCommandeErreur(''); }} className="btn-ghost-v" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}>Fermer</button>
+                  <button onClick={() => { closeModal(); setCommandeErreur(''); setRegPwdPanier(''); }} className="btn-ghost-v" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}>Fermer</button>
                   <button onClick={passerCommande} className="btn-v" style={{ flex: 2, justifyContent: 'center', padding: '12px' }}
-                    disabled={commandeLoading || panier.length === 0 || !infoClient.prenom || !infoClient.nom || !infoClient.telephone}>
+                    disabled={commandeLoading || panier.length === 0 || !infoClient.prenom || !infoClient.nom || !infoClient.telephone || !infoClient.email || !regPwdPanier}>
                     {commandeLoading ? 'Envoi...' : `Commander — ${total.toLocaleString('fr-DZ')} DA`}
                   </button>
                 </div>

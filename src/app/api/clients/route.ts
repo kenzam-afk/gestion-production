@@ -1,8 +1,17 @@
 import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
 
-// ─── GET : tous les clients ──────────────────────────────────
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const email = searchParams.get('email');
+
+    // Récupérer un client par email
+    if (email) {
+      const [client] = await sql`SELECT * FROM clients WHERE email = ${email}`;
+      return Response.json(client || null);
+    }
+
     const rows = await sql`
       SELECT
         c.*,
@@ -18,13 +27,12 @@ export async function GET() {
       ORDER BY c.created_at DESC
     `;
     return Response.json(rows);
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
 
-// ─── POST : créer un client ──────────────────────────────────
-export async function POST(request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
@@ -53,7 +61,7 @@ export async function POST(request) {
     `;
 
     return Response.json(result, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     return Response.json({ error: String(error) }, { status: 500 });
   }
 }
