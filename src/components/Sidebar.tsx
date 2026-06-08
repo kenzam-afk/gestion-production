@@ -19,7 +19,6 @@ const navigation = [
   { name: 'Clients',            href: '/admin/clients',            icon: Users,           color: '#f59e0b' },
   { name: 'Commandes',          href: '/admin/commandes',          icon: ShoppingCart,    color: '#a855f7' },
   { name: 'Fabrication',        href: '/admin/fabrication',        icon: Factory,         color: '#ec4899' },
-  { name: 'Analyse Prod.',      href: '/admin/fabrication/analyse', icon: BarChart2,        color: '#10b981' },
   { name: 'Livraisons',         href: '/admin/livraisons',         icon: Truck,           color: '#06b6d4' },
   { name: 'Livreurs',           href: '/admin/livreur',            icon: UserCheck,       color: '#10b981' },
   { name: 'Rapports',           href: '/admin/rapports',           icon: BarChart3,       color: '#f59e0b' },

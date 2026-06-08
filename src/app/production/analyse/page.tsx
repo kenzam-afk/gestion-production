@@ -45,7 +45,7 @@ const DS = `
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 `;
 
-export default function FabricationAnalysePage() {
+export default function ProductionAnalysePage() {
   const [commandes,    setCommandes]    = useState<Commande[]>([]);
   const [produits,     setProduits]     = useState<Produit[]>([]);
   const [matieres,     setMatieres]     = useState<Matiere[]>([]);
@@ -75,7 +75,7 @@ export default function FabricationAnalysePage() {
     const fournisseur = fournisseurs[0];
     if (!fournisseur) { alert('Aucun fournisseur disponible !'); return; }
 
-    const qteFinale = Math.ceil(Number(quantite));
+    const qteFinale  = Math.ceil(Number(quantite));
     const matIdFinal = Number(matiereId);
 
     if (isNaN(matIdFinal) || isNaN(qteFinale) || qteFinale <= 0) {
@@ -91,18 +91,14 @@ export default function FabricationAnalysePage() {
         quantite:       qteFinale,
         fournisseur_id: Number(fournisseur.id),
       };
-      console.log('Envoi demande:', body);
-
-      const res = await fetch('/api/fournisseurs/demande', {
+      const res  = await fetch('/api/fournisseurs/demande', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      console.log('Réponse API:', data);
-
       if (res.ok) { alert(`✅ Demande envoyée à ${fournisseur.nom} !`); }
-      else { alert('Erreur : ' + (data.error || 'Inconnue')); }
+      else        { alert('Erreur : ' + (data.error || 'Inconnue')); }
     } catch(e) {
       console.error(e);
       alert('Erreur lors de l\'envoi');
@@ -142,17 +138,18 @@ export default function FabricationAnalysePage() {
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:24 }}>
         <div>
-          <Link href="/admin/fabrication">
-            <button className="btn-ghost" style={{ marginBottom:10 }}><ArrowLeft size={13}/> Retour aux ordres</button>
+          {/* ✅ Lien retour vers /production (plus /admin/fabrication) */}
+          <Link href="/production">
+            <button className="btn-ghost" style={{ marginBottom:10 }}><ArrowLeft size={13}/> Retour à la production</button>
           </Link>
-          <div style={{ fontSize:10.5, fontWeight:700, color:'#10b981', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Analyse Production</div>
+          <div style={{ fontSize:10.5, fontWeight:700, color:'#10b981', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Responsable Production</div>
           <h1 style={{ fontSize:22, fontWeight:800, color:'var(--text-primary)', margin:0, display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ width:36, height:36, background:'linear-gradient(135deg,#10b981,#06b6d4)', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 16px rgba(16,185,129,.4)' }}>
               <BarChart2 size={18} color="white" />
             </div>
-            Analyse & Prédiction de Production
+            Analyse MRP & Prédiction de Production
           </h1>
-          <p style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>Tendances · Historique · Besoins matières · Plan anticipé</p>
+          <p style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>Tendances · Historique · Besoins matières · Commander au fournisseur</p>
         </div>
         <button onClick={fetchAll} className="btn-ghost"><RefreshCw size={13}/> Actualiser</button>
       </div>
@@ -178,9 +175,9 @@ export default function FabricationAnalysePage() {
           const vm1 = ventesParProduitEtPeriode(p.id, debutM1, debutM0);
           const vm2 = ventesParProduitEtPeriode(p.id, debutM2, debutM1);
           const vm3 = ventesParProduitEtPeriode(p.id, debutM3, debutM2);
-          const moy3mois     = Math.round((vm1 + vm2 + vm3) / 3);
-          const tendance     = vm1 > vm2 * 1.15 ? 'hausse' : vm1 < vm2 * 0.85 ? 'baisse' : 'stable';
-          const coeff        = tendance==='hausse'?1.2:tendance==='baisse'?0.9:1.0;
+          const moy3mois       = Math.round((vm1 + vm2 + vm3) / 3);
+          const tendance       = vm1 > vm2 * 1.15 ? 'hausse' : vm1 < vm2 * 0.85 ? 'baisse' : 'stable';
+          const coeff          = tendance==='hausse'?1.2:tendance==='baisse'?0.9:1.0;
           const prevision_mois = Math.round(moy3mois * coeff);
 
           const commandesProduit = commandes
@@ -405,10 +402,13 @@ export default function FabricationAnalysePage() {
                       ))}
                       <div style={{ padding:'12px 14px', background:matOK?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)', border:`1px solid ${matOK?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'}`, borderRadius:10, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <div style={{ fontSize:13, fontWeight:700, color:matOK?'#10b981':'#ef4444' }}>
-                          {matOK ? `✓ Toutes les matières disponibles — ${a_produire>0?`Lancer la production de ${a_produire}u`:'Aucune production nécessaire'}` : `⚠ ${matManquant.length} matière(s) manquante(s) — Commander avant de lancer`}
+                          {matOK
+                            ? `✓ Toutes les matières disponibles — ${a_produire>0?`Lancer la production de ${a_produire}u`:'Aucune production nécessaire'}`
+                            : `⚠ ${matManquant.length} matière(s) manquante(s) — Commander avant de lancer`}
                         </div>
+                        {/* ✅ Lien vers /production (plus /admin/fabrication) */}
                         {a_produire > 0 && matOK && (
-                          <Link href="/admin/fabrication">
+                          <Link href="/production">
                             <button className="btn-violet"><Factory size={12}/> Voir les ordres</button>
                           </Link>
                         )}

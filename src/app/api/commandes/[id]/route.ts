@@ -1,6 +1,8 @@
 import sql from '@/lib/db';
 import { NextRequest } from 'next/server';
 import { onStatutCommande, onNouvelleLivraison } from '@/lib/tracker';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -51,6 +53,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return Response.json({ error: 'Statut invalide' }, { status: 400 });
     }
 
+    // ✅ Bloquer le passage en_fabrication pour l'admin
+    // Seul le responsable_prod peut lancer la fabrication
+    if (statut === 'en_fabrication') {
+      const session = await getServerSession(authOptions);
+      const role = (session?.user as any)?.role;
+      if (!role || !['responsable_prod', 'production'].includes(role)) {
+        return Response.json(
+          { error: 'Accès refusé — seul le responsable de production peut lancer la fabrication', code: 'FORBIDDEN' },
+          { status: 403 }
+        );
+      }
+    }
+
     const [avant] = await sql`
       SELECT
         c.statut,
@@ -98,7 +113,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       if (matieres_manquantes.length > 0) {
         return Response.json({
-          error: `Matières premières insuffisantes pour lancer la fabrication`,
+          error: 'Matières premières insuffisantes pour lancer la fabrication',
           matieres_manquantes,
           code: 'MATIERES_INSUFFISANTES',
         }, { status: 400 });

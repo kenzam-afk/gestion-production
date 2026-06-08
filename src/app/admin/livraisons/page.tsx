@@ -32,6 +32,7 @@ label{font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom
 .modal{background:var(--bg-card);border:1px solid var(--border);border-radius:18px;width:100%;max-width:400px;padding:28px;box-shadow:0 32px 80px rgba(0,0,0,.5);animation:slideUp .2s}
 .tr-row{border-bottom:1px solid var(--border);transition:background .15s}
 .tr-row:hover td{background:var(--bg-card-hover) !important}
+.readonly-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#f59e0b;border-radius:8px;padding:5px 11px;font-size:11.5px;font-weight:600;font-family:'Outfit',sans-serif}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -62,40 +63,18 @@ export default function Livraisons() {
   async function handleAssignerLivreur() {
     if (!editModal) return;
     setSaving(true);
-
     const livreurIdEnvoi = livreurId ? parseInt(livreurId) : null;
-    console.log('Assignation livreur:', { livraison_id: editModal.id, livreur_id: livreurIdEnvoi });
-
     const res = await fetch(`/api/livraisons/${editModal.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        statut:     editModal.statut,
-        livreur_id: livreurIdEnvoi,
-      }),
+      body: JSON.stringify({ statut: editModal.statut, livreur_id: livreurIdEnvoi }),
     });
-
-    const data = await res.json();
-    console.log('Réponse API:', data);
-
     setSaving(false);
     setEditModal(null);
-
     if (res.ok) {
       setSuccessMsg('Livreur assigné avec succès !');
       setTimeout(() => setSuccessMsg(''), 3000);
     }
-
-    fetchAll();
-  }
-
-  async function handleLivrer(id: number) {
-    if (!confirm('Confirmer la livraison ?')) return;
-    await fetch(`/api/livraisons/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ statut: 'livree' }),
-    });
     fetchAll();
   }
 
@@ -129,9 +108,11 @@ export default function Livraisons() {
             {stats.total} livraisons · {stats.attente} en attente · {stats.livrees} effectuées
           </p>
         </div>
-        <button onClick={fetchAll} className="btn-ghost">
-          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Actualiser
-        </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button onClick={fetchAll} className="btn-ghost">
+            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Actualiser
+          </button>
+        </div>
       </div>
 
       {/* Succès */}
@@ -142,20 +123,20 @@ export default function Livraisons() {
         </div>
       )}
 
-      {/* Info */}
+      {/* ✅ Bandeau info mis à jour — la validation est faite par le livreur */}
       <div style={{ background: 'rgba(6,182,212,.08)', border: '1px solid rgba(6,182,212,.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Truck size={15} color="#06b6d4" />
         <span style={{ fontSize: 13, color: '#06b6d4', fontWeight: 500 }}>
-          Les livraisons sont créées automatiquement quand une commande passe à "Prête à livrer". Vous pouvez assigner ou modifier le livreur ici.
+          Les livraisons sont créées automatiquement quand une commande passe à "Prête à livrer". Assignez un livreur ici — la validation de la livraison est effectuée par le livreur lui-même.
         </span>
       </div>
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 20 }}>
         {[
-          { label: 'Total',      value: stats.total,   color: '#06b6d4', bg: 'rgba(6,182,212,.1)',   border: 'rgba(6,182,212,.2)' },
-          { label: 'En attente', value: stats.attente, color: '#f59e0b', bg: 'rgba(245,158,11,.1)',  border: 'rgba(245,158,11,.2)' },
-          { label: 'Livrées',    value: stats.livrees, color: '#10b981', bg: 'rgba(16,185,129,.1)',  border: 'rgba(16,185,129,.2)' },
+          { label: 'Total',      value: stats.total,   color: '#06b6d4', bg: 'rgba(6,182,212,.1)',  border: 'rgba(6,182,212,.2)'  },
+          { label: 'En attente', value: stats.attente, color: '#f59e0b', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.2)' },
+          { label: 'Livrées',    value: stats.livrees, color: '#10b981', bg: 'rgba(16,185,129,.1)', border: 'rgba(16,185,129,.2)' },
         ].map((s, i) => (
           <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 14, padding: '18px 20px' }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -219,6 +200,7 @@ export default function Livraisons() {
                   </td>
                   <td style={{ padding: '13px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
+                      {/* ✅ Bouton "Assigner livreur" conservé — c'est le rôle de l'admin */}
                       {l.statut !== 'livree' && (
                         <button
                           onClick={() => { setEditModal(l); setLivreurId(l.livreur_id ? String(l.livreur_id) : ''); }}
@@ -227,13 +209,11 @@ export default function Livraisons() {
                           <Pencil size={12} /> Livreur
                         </button>
                       )}
-                      {l.statut !== 'livree' && (
-                        <button
-                          onClick={() => handleLivrer(l.id)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(16,185,129,.1)', border: '1px solid rgba(16,185,129,.25)', color: '#10b981', borderRadius: 8, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}
-                        >
-                          <CheckCircle size={12} /> Livrer
-                        </button>
+                      {/* ✅ Bouton "Livrer" SUPPRIMÉ — c'est le livreur qui valide */}
+                      {l.statut === 'livree' && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#10b981', fontWeight: 600 }}>
+                          <CheckCircle size={12}/> Livrée
+                        </span>
                       )}
                       <button onClick={() => handleDelete(l.id)} className="btn-danger"><Trash2 size={12} /></button>
                     </div>
@@ -250,7 +230,7 @@ export default function Livraisons() {
         )}
       </div>
 
-      {/* Modal assigner livreur */}
+      {/* Modal assigner livreur — inchangé */}
       {editModal && (
         <div className="overlay" onClick={() => setEditModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -260,35 +240,24 @@ export default function Livraisons() {
                 <X size={14} />
               </button>
             </div>
-
             <div style={{ background: 'var(--bg-surface)', borderRadius: 10, padding: '12px 14px', marginBottom: 18, border: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{editModal.client_nom}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Livraison #{editModal.id} · Commande #{editModal.commande_id}</div>
             </div>
-
             <div style={{ marginBottom: 6 }}>
               <label>Livreur assigné</label>
-              <select
-                className="sel"
-                value={livreurId}
-                onChange={e => {
-                  console.log('Sélection livreur:', e.target.value);
-                  setLivreurId(e.target.value);
-                }}
-              >
+              <select className="sel" value={livreurId} onChange={e => setLivreurId(e.target.value)}>
                 <option value="">— Sans livreur assigné —</option>
                 {livreurs.map(l => (
                   <option key={l.id} value={String(l.id)}>{l.nom}</option>
                 ))}
               </select>
             </div>
-
             {livreurId && (
               <div style={{ fontSize: 12, color: '#10b981', marginBottom: 14 }}>
                 ✓ {livreurs.find(l => String(l.id) === livreurId)?.nom} sera assigné
               </div>
             )}
-
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button onClick={() => setEditModal(null)} className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>Annuler</button>
               <button onClick={handleAssignerLivreur} disabled={saving} className="btn-primary" style={{ flex: 2, justifyContent: 'center' }}>

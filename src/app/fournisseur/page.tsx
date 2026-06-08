@@ -27,14 +27,9 @@ body{margin:0;background:var(--bg-base)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-ghost{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:8px 16px;font-weight:500;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .15s}
 .btn-ghost:hover{border-color:#10b981;color:#10b981;background:rgba(16,185,129,.08)}
-.inp{width:100%;background:var(--bg-surface) !important;border:1px solid var(--border) !important;border-radius:9px;padding:10px 13px;font-family:'Outfit',sans-serif;font-size:13.5px;color:var(--text-primary) !important;outline:none;transition:all .15s}
-.inp:focus{border-color:#10b981 !important;box-shadow:0 0 0 3px rgba(16,185,129,.15) !important}
 .card{background:var(--bg-card);border-radius:14px;border:1px solid var(--border)}
-.overlay{position:fixed;inset:0;background:rgba(4,4,20,.85);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;animation:fadeIn .2s}
-.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:18px;width:100%;max-width:460px;padding:28px;box-shadow:0 32px 80px rgba(0,0,0,.5);animation:slideUp .2s}
 .tab-btn{flex:1;padding:12px;font-size:13px;font-weight:500;border:none;background:transparent;cursor:pointer;font-family:'Outfit',sans-serif;color:var(--text-secondary);transition:all .15s;border-bottom:2px solid transparent}
 .tab-btn.active{color:#10b981;border-bottom-color:#10b981;background:rgba(16,185,129,.08)}
-label{font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:5px;display:block;letter-spacing:.02em}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -45,9 +40,6 @@ export default function FournisseurPage() {
   const [demandes, setDemandes] = useState<DemandeAppro[]>([]);
   const [loading, setLoading]   = useState(true);
   const [activeTab, setActiveTab] = useState<'actives' | 'historique'>('actives');
-  const [modalReception, setModalReception] = useState<DemandeAppro | null>(null);
-  const [recForm, setRecForm]   = useState({ quantite_recue: '', notes: '' });
-  const [saving, setSaving]     = useState(false);
 
   async function fetchDemandes() {
     setLoading(true);
@@ -65,20 +57,10 @@ export default function FournisseurPage() {
     await fetch(`/api/fournisseurs/demande/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({statut:'confirmee'}) });
     fetchDemandes();
   }
+
   async function expedierDemande(id: number) {
     await fetch(`/api/fournisseurs/demande/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({statut:'expediee'}) });
     fetchDemandes();
-  }
-  async function confirmerReception() {
-    if (!modalReception) return;
-    setSaving(true);
-    try {
-      await fetch(`/api/fournisseurs/demande/${modalReception.id}/reception`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ quantite_recue: parseFloat(recForm.quantite_recue)||modalReception.quantite, notes:recForm.notes }),
-      });
-      setModalReception(null); fetchDemandes();
-    } finally { setSaving(false); }
   }
 
   const actives    = demandes.filter(d => !['recue','annulee'].includes(d.statut));
@@ -116,6 +98,7 @@ export default function FournisseurPage() {
           <div style={{ fontSize:10.5, fontWeight:700, color:'#10b981', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Tableau de bord</div>
           <h1 style={{ fontSize:22, fontWeight:800, color:'var(--text-primary)', margin:0 }}>Demandes d'approvisionnement</h1>
         </div>
+
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:20 }}>
           {[
             { label:'En attente', value:stats.en_attente, color:'#f59e0b', bg:'rgba(245,158,11,.1)',  border:'rgba(245,158,11,.2)'  },
@@ -129,6 +112,7 @@ export default function FournisseurPage() {
             </div>
           ))}
         </div>
+
         <div className="card">
           <div style={{ display:'flex', borderBottom:'1px solid var(--border)' }}>
             <button onClick={() => setActiveTab('actives')}    className={`tab-btn${activeTab==='actives'?' active':''}`}>Actives ({actives.length})</button>
@@ -170,10 +154,23 @@ export default function FournisseurPage() {
                           <Clock size={12}/> Livraison prévue : {new Date(d.date_prevue).toLocaleDateString('fr-FR')}
                         </div>
                       )}
-                      <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-                        {d.statut==='en_attente' && <button onClick={() => confirmerDemande(d.id)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(168,85,247,.1)', border:'1px solid rgba(168,85,247,.25)', color:'#a855f7', borderRadius:8, padding:'7px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}><CheckCircle size={13}/> Confirmer</button>}
-                        {d.statut==='confirmee' && <button onClick={() => expedierDemande(d.id)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(6,182,212,.1)', border:'1px solid rgba(6,182,212,.25)', color:'#06b6d4', borderRadius:8, padding:'7px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}><Truck size={13}/> Marquer expédié</button>}
-                        {d.statut==='expediee' && <button onClick={() => { setModalReception(d); setRecForm({quantite_recue:String(d.quantite),notes:''}); }} className="btn-primary"><CheckCircle size={13}/> Confirmer réception</button>}
+                      <div style={{ display:'flex', gap:8, justifyContent:'flex-end', alignItems:'center' }}>
+                        {d.statut==='en_attente' && (
+                          <button onClick={() => confirmerDemande(d.id)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(168,85,247,.1)', border:'1px solid rgba(168,85,247,.25)', color:'#a855f7', borderRadius:8, padding:'7px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                            <CheckCircle size={13}/> Confirmer
+                          </button>
+                        )}
+                        {d.statut==='confirmee' && (
+                          <button onClick={() => expedierDemande(d.id)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(6,182,212,.1)', border:'1px solid rgba(6,182,212,.25)', color:'#06b6d4', borderRadius:8, padding:'7px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                            <Truck size={13}/> Marquer expédié
+                          </button>
+                        )}
+                        {/* ✅ Expédiée : le fournisseur ne confirme plus la réception — c'est le responsable prod */}
+                        {d.statut==='expediee' && (
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:'#06b6d4', fontWeight:600, padding:'6px 12px', background:'rgba(6,182,212,.08)', borderRadius:8, border:'1px solid rgba(6,182,212,.2)' }}>
+                            <Truck size={13}/> Expédiée — réception en attente
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -183,31 +180,6 @@ export default function FournisseurPage() {
           </div>
         </div>
       </div>
-
-      {modalReception && (
-        <div className="overlay" onClick={() => setModalReception(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-              <h2 style={{ fontWeight:700, fontSize:18, color:'var(--text-primary)', margin:0 }}>Confirmer la réception</h2>
-              <button onClick={() => setModalReception(null)} style={{ width:28, height:28, borderRadius:8, background:'rgba(255,255,255,.06)', border:'1px solid var(--border)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-secondary)' }}><X size={14}/></button>
-            </div>
-            <div style={{ background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', borderRadius:10, padding:'12px 14px', marginBottom:18 }}>
-              <div style={{ fontWeight:600, fontSize:13, color:'var(--text-primary)' }}>{modalReception.matiere_titre}</div>
-              <div style={{ fontSize:12, color:'#10b981', marginTop:3 }}>Commandé : {modalReception.quantite} {modalReception.matiere_unite}</div>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:13 }}>
-              <div><label>Quantité réellement reçue *</label><input className="inp" type="number" min="0" step="0.01" value={recForm.quantite_recue} onChange={e => setRecForm({...recForm,quantite_recue:e.target.value})}/></div>
-              <div><label>Notes / observations</label><textarea className="inp" rows={2} value={recForm.notes} onChange={e => setRecForm({...recForm,notes:e.target.value} as any)}/></div>
-            </div>
-            <div style={{ display:'flex', gap:10, marginTop:20 }}>
-              <button onClick={() => setModalReception(null)} className="btn-ghost" style={{ flex:1, justifyContent:'center' }}>Annuler</button>
-              <button onClick={confirmerReception} disabled={saving} className="btn-primary" style={{ flex:2, justifyContent:'center' }}>
-                <CheckCircle size={14}/> {saving?'Enregistrement...':'Confirmer la réception'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

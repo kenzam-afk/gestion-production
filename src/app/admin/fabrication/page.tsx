@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Factory, RefreshCw, Package, AlertTriangle, CheckCircle, Layers, Clock, PlayCircle, BarChart2, ArrowRight, ShoppingCart } from "lucide-react";
-import Link from "next/link";
+import { Factory, RefreshCw, Package, AlertTriangle, CheckCircle, Layers, Clock, ShoppingCart } from "lucide-react";
 
 interface Matiere {
   matiere_id: number; titre: string; unite: string;
@@ -25,22 +24,17 @@ const STATUT_CFG: Record<string, { label: string; color: string; bg: string; bor
 const DS = `
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box}
-.btn-violet{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;border-radius:9px;padding:8px 16px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .2s;box-shadow:0 2px 10px rgba(124,58,237,.3)}
-.btn-violet:hover{transform:translateY(-1px);filter:brightness(1.1)}
-.btn-green{display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#10b981;border-radius:9px;padding:8px 16px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px}
-.btn-green:hover{background:rgba(16,185,129,.25)}
 .btn-ghost{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:8px 14px;font-weight:500;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .15s}
 .btn-ghost:hover{border-color:var(--violet);color:var(--violet-light)}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
-.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:7px;font-size:11.5px;font-weight:500}
+.readonly-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#f59e0b;border-radius:8px;padding:5px 11px;font-size:11.5px;font-weight:600;font-family:'Outfit',sans-serif}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 `;
 
 export default function FabricationPage() {
-  const [ordres, setOrdres]     = useState<OrdreFab[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [actioning, setActioning] = useState<number | null>(null);
-  const [stats, setStats]       = useState({ planifie: 0, en_cours: 0, termine: 0 });
+  const [ordres, setOrdres]   = useState<OrdreFab[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats]     = useState({ planifie: 0, en_cours: 0, termine: 0 });
 
   async function fetchOrdres() {
     setLoading(true);
@@ -60,20 +54,6 @@ export default function FabricationPage() {
 
   useEffect(() => { fetchOrdres(); }, []);
 
-  async function handleStatut(id: number, statut: string, date_debut?: string | null) {
-    setActioning(id);
-    await fetch(`/api/fabrication/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        statut,
-        date_debut: date_debut || new Date().toISOString().split('T')[0],
-        date_fin: statut === 'termine' ? new Date().toISOString().split('T')[0] : null,
-      }),
-    });
-    await fetchOrdres();
-    setActioning(null);
-  }
-
   return (
     <div style={{ fontFamily:"'Outfit',sans-serif", padding:'28px 32px', maxWidth:1300 }}>
       <style>{DS}</style>
@@ -88,27 +68,30 @@ export default function FabricationPage() {
             </div>
             Ordres de Fabrication
           </h1>
-          <p style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>Gérez les ordres de production en cours</p>
+          <p style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>Suivi en lecture seule — la gestion est assurée par le responsable de production</p>
         </div>
-        <div style={{ display:'flex', gap:10 }}>
+        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
           <button onClick={fetchOrdres} className="btn-ghost">
             <RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }} /> Actualiser
           </button>
-          <Link href="/admin/fabrication/analyse">
-            <button className="btn-violet">
-              <BarChart2 size={14} /> Analyse & Prédiction <ArrowRight size={13}/>
-            </button>
-          </Link>
+        </div>
+      </div>
+
+      {/* ✅ Bandeau info — explique que les actions sont côté responsable prod */}
+      <div style={{ background:'rgba(245,158,11,.07)', border:'1px solid rgba(245,158,11,.22)', borderRadius:12, padding:'12px 18px', marginBottom:24, display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:16 }}>ℹ️</span>
+        <div style={{ fontSize:13, color:'var(--text-secondary)' }}>
+          <strong style={{ color:'var(--text-primary)' }}>Accès superviseur uniquement.</strong> Le lancement, le suivi et la validation des ordres de fabrication sont gérés par le <strong style={{ color:'#f59e0b' }}>responsable de production</strong>.
         </div>
       </div>
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:24 }}>
         {[
-          { label:'Total ordres', value:ordres.length,   color:'#a855f7', bg:'rgba(168,85,247,.1)', border:'rgba(168,85,247,.2)' },
-          { label:'Planifiés',    value:stats.planifie,  color:'#f59e0b', bg:'rgba(245,158,11,.1)', border:'rgba(245,158,11,.2)' },
-          { label:'En cours',     value:stats.en_cours,  color:'#ec4899', bg:'rgba(236,72,153,.1)', border:'rgba(236,72,153,.2)' },
-          { label:'Terminés',     value:stats.termine,   color:'#10b981', bg:'rgba(16,185,129,.1)', border:'rgba(16,185,129,.2)' },
+          { label:'Total ordres', value:ordres.length,  color:'#a855f7', bg:'rgba(168,85,247,.1)', border:'rgba(168,85,247,.2)' },
+          { label:'Planifiés',    value:stats.planifie, color:'#f59e0b', bg:'rgba(245,158,11,.1)', border:'rgba(245,158,11,.2)' },
+          { label:'En cours',     value:stats.en_cours, color:'#ec4899', bg:'rgba(236,72,153,.1)', border:'rgba(236,72,153,.2)' },
+          { label:'Terminés',     value:stats.termine,  color:'#10b981', bg:'rgba(16,185,129,.1)', border:'rgba(16,185,129,.2)' },
         ].map((s,i) => (
           <div key={i} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:14, padding:'16px 18px' }}>
             <div style={{ fontSize:24, fontWeight:800, color:s.color }}>{s.value}</div>
@@ -117,29 +100,13 @@ export default function FabricationPage() {
         ))}
       </div>
 
-      {/* Lien vers analyse */}
-      <div style={{ background:'rgba(124,58,237,.06)', border:'1px solid rgba(124,58,237,.2)', borderRadius:12, padding:'14px 18px', marginBottom:24, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <BarChart2 size={16} color="#a855f7" />
-          <div>
-            <div style={{ fontWeight:600, fontSize:13, color:'var(--text-primary)' }}>Analyse des tendances & Prédiction MRP</div>
-            <div style={{ fontSize:12, color:'var(--text-muted)' }}>Voir les tendances de vente, les besoins en matières et le plan de production anticipé</div>
-          </div>
-        </div>
-        <Link href="/admin/fabrication/analyse">
-          <button className="btn-violet" style={{ whiteSpace:'nowrap' }}>
-            Voir l'analyse <ArrowRight size={13}/>
-          </button>
-        </Link>
-      </div>
-
-      {/* Liste ordres */}
+      {/* Liste ordres — lecture seule */}
       {loading ? (
         <div style={{ textAlign:'center', padding:56, color:'var(--text-muted)' }}>Chargement...</div>
       ) : ordres.length === 0 ? (
         <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:16, padding:56, textAlign:'center' }}>
           <Factory size={36} style={{ display:'block', margin:'0 auto 12px', opacity:.2, color:'var(--text-muted)' }} />
-          <p style={{ color:'var(--text-muted)', fontSize:14, margin:0 }}>Aucun ordre — confirmez une commande pour en générer</p>
+          <p style={{ color:'var(--text-muted)', fontSize:14, margin:0 }}>Aucun ordre de fabrication en cours</p>
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -161,7 +128,16 @@ export default function FabricationPage() {
                         <div style={{ fontWeight:700, fontSize:15, color:'var(--text-primary)' }}>{o.produit_nom}</div>
                         <div style={{ fontSize:12, color:'var(--text-muted)', display:'flex', alignItems:'center', gap:8, marginTop:2 }}>
                           <ShoppingCart size={11}/> Commande #{o.commande_ref}
-                          {o.date_debut && <span style={{ display:'flex', alignItems:'center', gap:4 }}><Clock size={11}/> Démarré le {new Date(o.date_debut).toLocaleDateString('fr-FR')}</span>}
+                          {o.date_debut && (
+                            <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                              <Clock size={11}/> Démarré le {new Date(o.date_debut).toLocaleDateString('fr-FR')}
+                            </span>
+                          )}
+                          {o.date_fin && (
+                            <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                              <CheckCircle size={11} color="#10b981"/> Terminé le {new Date(o.date_fin).toLocaleDateString('fr-FR')}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className="badge" style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}` }}>{cfg.label}</span>
@@ -172,30 +148,18 @@ export default function FabricationPage() {
                       )}
                     </div>
 
-                    {/* Quantité + Actions */}
-                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                      <div style={{ background:'rgba(124,58,237,.1)', border:'1px solid rgba(124,58,237,.2)', borderRadius:10, padding:'8px 16px', textAlign:'center' }}>
-                        <div style={{ fontSize:11, color:'var(--text-muted)' }}>À produire</div>
-                        <div style={{ fontSize:20, fontWeight:800, color:'var(--violet-light)' }}>{o.quantite} <span style={{ fontSize:12, fontWeight:400 }}>u</span></div>
-                      </div>
-                      {o.statut === 'planifie' && (
-                        <button onClick={() => handleStatut(o.id, 'en_cours')} className="btn-violet" disabled={actioning===o.id}>
-                          <PlayCircle size={14}/> {actioning===o.id?'...':'Lancer'}
-                        </button>
-                      )}
-                      {o.statut === 'en_cours' && (
-                        <button onClick={() => handleStatut(o.id, 'termine', o.date_debut)} className="btn-green" disabled={actioning===o.id}>
-                          <CheckCircle size={14}/> {actioning===o.id?'...':'Terminer'}
-                        </button>
-                      )}
+                    {/* ✅ Quantité uniquement — plus de boutons Lancer / Terminer */}
+                    <div style={{ background:'rgba(124,58,237,.1)', border:'1px solid rgba(124,58,237,.2)', borderRadius:10, padding:'8px 16px', textAlign:'center' }}>
+                      <div style={{ fontSize:11, color:'var(--text-muted)' }}>À produire</div>
+                      <div style={{ fontSize:20, fontWeight:800, color:'var(--violet-light)' }}>{o.quantite} <span style={{ fontSize:12, fontWeight:400 }}>u</span></div>
                     </div>
                   </div>
 
-                  {/* Matières */}
+                  {/* Matières — lecture seule */}
                   {(o.matieres||[]).length > 0 ? (
                     <div>
                       <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8, display:'flex', alignItems:'center', gap:5 }}>
-                        <Layers size={11}/> Matières nécessaires pour cette fabrication
+                        <Layers size={11}/> Matières nécessaires
                       </div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
                         {o.matieres.map((m, i) => (
@@ -213,6 +177,7 @@ export default function FabricationPage() {
                       <AlertTriangle size={13} color="#f59e0b"/> Nomenclature non définie pour ce produit
                     </div>
                   )}
+
                 </div>
               </div>
             );

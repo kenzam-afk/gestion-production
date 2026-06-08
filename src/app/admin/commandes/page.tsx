@@ -20,13 +20,15 @@ const STATUT_CFG: Record<string, { label: string; color: string; bg: string; bor
   annulee:        { label: "Annulée",        color: "#ef4444", bg: "rgba(239,68,68,.12)",   border: "rgba(239,68,68,.3)"   },
 };
 
+// ✅ MODIFIÉ : L'admin ne peut plus lancer la fabrication
+// confirmee → en_fabrication est retiré — c'est le responsable prod qui le fait
 const NEXT_STATUTS: Record<string, { label: string; statut: string; color: string }[]> = {
-  en_attente:     [{ label: "✓ Confirmer",          statut: "confirmee",      color: "#a855f7" }, { label: "✕ Annuler", statut: "annulee", color: "#ef4444" }],
-  confirmee:      [{ label: "⚙ Lancer fabrication", statut: "en_fabrication", color: "#ec4899" }, { label: "✕ Annuler", statut: "annulee", color: "#ef4444" }],
-  en_fabrication: [{ label: "📦 Prêt à livrer",     statut: "pret_livraison", color: "#06b6d4" }],
-  pret_livraison: [{ label: "🚚 Marquer livré",     statut: "livree",         color: "#10b981" }],
-  livree:  [],
-  annulee: [],
+  en_attente:     [{ label: "✓ Confirmer", statut: "confirmee", color: "#a855f7" }, { label: "✕ Annuler", statut: "annulee", color: "#ef4444" }],
+  confirmee:      [{ label: "✕ Annuler",  statut: "annulee",   color: "#ef4444" }],
+  en_fabrication: [],
+  pret_livraison: [],
+  livree:         [],
+  annulee:        [],
 };
 
 const DS = `
@@ -42,7 +44,7 @@ const DS = `
 .tr-row{border-bottom:1px solid var(--border);transition:background .15s}
 .tr-row:hover td{background:var(--bg-surface) !important}
 .filter-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border);background:transparent;cursor:pointer;font-family:'Outfit',sans-serif;color:var(--text-secondary);transition:all .15s}
-.filter-btn.active{background:rgba(124,58,237,.15);color:var(--violet-light);border-color:rgba(124,58,237,.4)}
+.filter-btn.active{background:rgba(124,58,237,.15);color:var(--violet-light);border-color:rgba(124,58,247,.4)}
 .filter-btn:hover:not(.active){border-color:var(--violet);color:var(--violet-light)}
 .action-btn{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap;border:1px solid transparent}
 .action-btn:hover{opacity:.85;transform:translateY(-1px)}
@@ -178,6 +180,9 @@ export default function CommandesPage() {
                 : `${cmd.client_prenom || ""} ${cmd.client_nom || ""}`.trim() || `Client #${cmd.client_id}`;
               const nextActions = NEXT_STATUTS[cmd.statut] || [];
 
+              // ✅ Badge "Traitement prod" pour les commandes confirmées — indique que c'est au responsable d'agir
+              const showProdBadge = cmd.statut === "confirmee";
+
               return (
                 <tr key={cmd.id} className="tr-row">
                   <td style={{ padding: "13px 16px", fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>#{cmd.id}</td>
@@ -203,9 +208,17 @@ export default function CommandesPage() {
                     )}
                   </td>
                   <td style={{ padding: "13px 16px" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
-                      {cfg.label}
-                    </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                        {cfg.label}
+                      </span>
+                      {/* ✅ Indique que le responsable prod doit prendre en charge */}
+                      {showProdBadge && (
+                        <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 500, paddingLeft: 2 }}>
+                          ⏳ En attente responsable prod
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: "13px 16px", textAlign: "right" }}>
                     <span style={{ fontWeight: 700, fontSize: 14, color: "#10b981" }}>

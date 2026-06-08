@@ -4,12 +4,28 @@ import { NextRequest } from 'next/server';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const utilisateur_id   = searchParams.get('utilisateur_id');
+    const utilisateur_id  = searchParams.get('utilisateur_id');
+    const statut          = searchParams.get('statut');
 
+    // ✅ Mode responsable prod : pas d'utilisateur_id → retourne toutes les demandes filtrées par statut
     if (!utilisateur_id) {
-      return Response.json({ error: 'utilisateur_id requis' }, { status: 400 });
+      if (!statut) {
+        return Response.json({ error: 'utilisateur_id ou statut requis' }, { status: 400 });
+      }
+
+      const demandes = await sql`
+        SELECT da.*, mp.titre AS matiere_titre, mp.unite AS matiere_unite, f.nom AS fournisseur_nom
+        FROM demandes_appro da
+        JOIN matieres_premieres mp ON mp.id = da.matiere_id
+        JOIN fournisseurs        f  ON f.id  = da.fournisseur_id
+        WHERE da.statut = ${statut}
+        ORDER BY da.created_at DESC
+      `;
+
+      return Response.json(demandes);
     }
 
+    // Mode fournisseur : filtre par utilisateur_id (comportement existant)
     const [fournisseur] = await sql`
       SELECT id FROM fournisseurs WHERE utilisateur_id = ${utilisateur_id}
     `;
