@@ -614,7 +614,7 @@ export default function Home() {
                     <div style={{ display:'flex', gap:10, marginTop:20 }}>
                       <button onClick={() => setRegisterStep(1)} className="btn-ghost-v" style={{ flex:1, justifyContent:'center', padding:'12px' }}>Retour</button>
                       <button onClick={handleRegister} className="btn-v" style={{ flex:2, justifyContent:'center', padding:'12px' }}
-                        disabled={registerLoading || !regEmail || !regTel || !regPwd || pwdRegErr || telRegErr}>
+                        disabled={registerLoading || !regEmail || !regTel || !regPwd || !!pwdRegErr || !!telRegErr}>
                         {registerLoading?'Création...':'Créer mon compte'}
                       </button>
                     </div>
