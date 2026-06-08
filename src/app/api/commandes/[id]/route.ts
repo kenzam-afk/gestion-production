@@ -2,7 +2,7 @@ import sql from '@/lib/db';
 import { NextRequest } from 'next/server';
 import { onStatutCommande, onNouvelleLivraison } from '@/lib/tracker';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
