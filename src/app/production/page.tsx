@@ -5,7 +5,8 @@ import { useSession, signOut } from 'next-auth/react';
 import {
   Factory, CheckCircle, PlayCircle, RefreshCw,
   Layers, AlertTriangle, BarChart3, LogOut, X, Info,
-  BarChart2, ArrowRight, ShoppingCart, Package, Truck,
+  BarChart2, ArrowRight, ShoppingCart, Package,
+  Send,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -18,15 +19,11 @@ interface MatiereStock {
   id: number; titre: string; unite: string;
   stock_actuel: number; stock_minimum: number; etat_stock: string;
 }
-interface MRPResult { besoins: any[]; resume: any; faisabilite_commandes: any[]; }
-
 interface CommandeConfirmee {
   id: number; total: number; created_at: string;
   client_nom?: string; client_prenom?: string; client_titre?: string; type_client?: string;
   lignes?: { produit_nom: string; quantite: number; unite: string }[];
 }
-
-// ✅ Demande d'appro expédiée — en attente de réception par le responsable prod
 interface DemandeExpediee {
   id: number; matiere_id: number; matiere_titre: string; matiere_unite: string;
   quantite: number; prix_unitaire: number | null; statut: string;
@@ -37,6 +34,7 @@ const STATUT_CFG: Record<string, { label: string; color: string; bg: string; bor
   planifie: { label: 'Planifié', color: '#f59e0b', bg: 'rgba(245,158,11,.1)', border: 'rgba(245,158,11,.25)' },
   en_cours: { label: 'En cours', color: '#a855f7', bg: 'rgba(168,85,247,.1)', border: 'rgba(168,85,247,.25)' },
   termine:  { label: 'Terminé',  color: '#10b981', bg: 'rgba(16,185,129,.1)', border: 'rgba(16,185,129,.25)' },
+  urgent:   { label: 'Urgent',   color: '#ef4444', bg: 'rgba(239,68,68,.1)',  border: 'rgba(239,68,68,.25)'  },
 };
 
 const DS = `
@@ -50,6 +48,8 @@ body{margin:0;background:var(--bg-base)}
 .btn-green:hover{background:rgba(16,185,129,.22);transform:translateY(-1px)}
 .btn-pink{display:inline-flex;align-items:center;gap:6px;background:rgba(236,72,153,.12);border:1px solid rgba(236,72,153,.3);color:#ec4899;border-radius:9px;padding:8px 16px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .2s}
 .btn-pink:hover{background:rgba(236,72,153,.22);transform:translateY(-1px)}
+.btn-orange{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#f59e0b;border-radius:9px;padding:7px 12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;font-size:12px}
+.btn-orange:hover{background:rgba(245,158,11,.22)}
 .btn-ghost{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:8px 16px;font-weight:500;cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .15s}
 .btn-ghost:hover{border-color:var(--violet);color:var(--violet-light)}
 .input-field{width:100%;background:var(--bg-surface) !important;border:1px solid var(--border) !important;border-radius:9px;padding:10px 13px;font-family:'Outfit',sans-serif;font-size:13.5px;color:var(--text-primary) !important;outline:none;transition:all .15s}
@@ -67,74 +67,91 @@ label{font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 `;
 
-type TabId = 'commandes' | 'receptions' | 'fabrication' | 'matieres' | 'mrp';
+// Onglets sans MRP
+type TabId = 'commandes' | 'receptions' | 'fabrication' | 'matieres';
 
 export default function ProductionPage() {
   const { data: session } = useSession();
-  const [ordres, setOrdres]                     = useState<OrdreFab[]>([]);
-  const [matieres, setMatieres]                 = useState<MatiereStock[]>([]);
-  const [mrp, setMrp]                           = useState<MRPResult | null>(null);
-  const [commandes, setCommandes]               = useState<CommandeConfirmee[]>([]);
+  const [ordres, setOrdres]                       = useState<OrdreFab[]>([]);
+  const [matieres, setMatieres]                   = useState<MatiereStock[]>([]);
+  const [commandes, setCommandes]                 = useState<CommandeConfirmee[]>([]);
   const [demandesExpediees, setDemandesExpediees] = useState<DemandeExpediee[]>([]);
-  const [loading, setLoading]                   = useState(true);
-  const [activeTab, setActiveTab]               = useState<TabId>('commandes');
+  const [fournisseurs, setFournisseurs]           = useState<any[]>([]);
+  const [loading, setLoading]                     = useState(true);
+  const [activeTab, setActiveTab]                 = useState<TabId>('commandes');
 
-  // Modal fabrication validation
   const [modalValidation, setModalValidation]   = useState<OrdreFab | null>(null);
   const [valForm, setValForm]                   = useState({ quantite_produite: '', quantite_rebutee: '0', observations: '' });
-
-  // ✅ Modal réception matière (responsable prod)
   const [modalReception, setModalReception]     = useState<DemandeExpediee | null>(null);
   const [recForm, setRecForm]                   = useState({ quantite_recue: '', notes: '' });
-
   const [saving, setSaving]                     = useState(false);
-  const [mrpLoading, setMrpLoading]             = useState(false);
   const [launching, setLaunching]               = useState<number | null>(null);
+
+  // ── Alerte matières manquantes lors du lancement ──────────
+  const [modalMatieres, setModalMatieres] = useState<{
+    commande_id: number;
+    matieres: { matiere: string; stock_actuel: number; quantite_requise: number; manque: number; unite: string }[];
+  } | null>(null);
 
   async function fetchAll() {
     setLoading(true);
     try {
-      const [ro, rm, rc, rd] = await Promise.all([
+      const [ro, rm, rc, rd, rf] = await Promise.all([
         fetch('/api/fabrication').then(r => r.json()),
         fetch('/api/matieres-premieres').then(r => r.json()),
         fetch('/api/commandes').then(r => r.json()),
-        // ✅ Récupère toutes les demandes d'appro expédiées (en attente de réception)
         fetch('/api/fournisseurs/demande?statut=expediee').then(r => r.json()),
+        fetch('/api/fournisseurs').then(r => r.json()),
       ]);
       setOrdres(Array.isArray(ro) ? ro : []);
       setMatieres(Array.isArray(rm) ? rm : []);
       const all = Array.isArray(rc) ? rc : [];
       setCommandes(all.filter((c: any) => c.statut === 'confirmee'));
       setDemandesExpediees(Array.isArray(rd) ? rd : []);
+      setFournisseurs(Array.isArray(rf) ? rf : []);
     } finally { setLoading(false); }
   }
 
-  async function fetchMRP() {
-    setMrpLoading(true);
-    try {
-      const res = await fetch('/api/mrp');
-      setMrp(await res.json());
-    } finally { setMrpLoading(false); }
-  }
-
   useEffect(() => { fetchAll(); }, []);
-  useEffect(() => { if (activeTab === 'mrp' && !mrp) fetchMRP(); }, [activeTab]);
 
+  // ── Lancer fabrication ────────────────────────────────────
+  // PUT /api/commandes/:id avec statut en_fabrication
+  // L'API crée les ordres_fabrication automatiquement et vérifie les matières
   async function lancerFabrication(commandeId: number) {
     setLaunching(commandeId);
     try {
-      await fetch(`/api/commandes/${commandeId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/commandes/${commandeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: 'en_fabrication' }),
+        credentials: 'include', // transmet les cookies de session
       });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.code === 'MATIERES_INSUFFISANTES') {
+          // Affiche la modale matières manquantes au lieu d'un alert
+          setModalMatieres({ commande_id: commandeId, matieres: data.matieres_manquantes });
+        } else {
+          alert('Erreur : ' + (data.error || 'Inconnue'));
+        }
+        return;
+      }
+
+      // Succès → basculer sur l'onglet fabrication et rafraîchir
+      setActiveTab('fabrication');
       await fetchAll();
-    } finally { setLaunching(null); }
+    } finally {
+      setLaunching(null);
+    }
   }
 
   async function handleStatut(id: number, statut: string) {
     await fetch(`/api/fabrication/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ statut }),
+      credentials: 'include',
     });
     fetchAll();
   }
@@ -144,7 +161,9 @@ export default function ProductionPage() {
     setSaving(true);
     try {
       await fetch('/api/production/valider', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           ordre_fab_id:      modalValidation.id,
           responsable_id:    (session?.user as any)?.id,
@@ -159,13 +178,14 @@ export default function ProductionPage() {
     } finally { setSaving(false); }
   }
 
-  // ✅ Confirmer la réception de la matière — réservé au responsable prod
   async function confirmerReception() {
     if (!modalReception) return;
     setSaving(true);
     try {
       await fetch(`/api/fournisseurs/demande/${modalReception.id}/reception`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           quantite_recue: parseFloat(recForm.quantite_recue) || modalReception.quantite,
           notes: recForm.notes,
@@ -177,25 +197,38 @@ export default function ProductionPage() {
     } finally { setSaving(false); }
   }
 
-  async function lancerMRP() {
-    setMrpLoading(true);
-    await fetch('/api/mrp', { method: 'POST' });
-    await fetchMRP();
+  async function commanderFournisseur(matiereId: number, quantite: number, titreMat: string) {
+    const fournisseur = fournisseurs[0];
+    if (!fournisseur) { alert('Aucun fournisseur disponible !'); return; }
+    if (!confirm(`Envoyer une demande à ${fournisseur.nom} pour ${Math.ceil(quantite)} ${titreMat} ?`)) return;
+    try {
+      const res = await fetch('/api/fournisseurs/demande', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ matiere_id: Number(matiereId), quantite: Math.ceil(quantite), fournisseur_id: Number(fournisseur.id) }),
+      });
+      const data = await res.json();
+      if (res.ok) alert(`✅ Demande envoyée à ${fournisseur.nom} !`);
+      else alert('Erreur : ' + (data.error || 'Inconnue'));
+    } catch { alert("Erreur lors de l'envoi"); }
   }
 
   const stats = {
-    confirmees:   commandes.length,
-    receptions:   demandesExpediees.length,
-    planifie:     ordres.filter(o => o.statut === 'planifie').length,
-    en_cours:     ordres.filter(o => o.statut === 'en_cours').length,
-    termine:      ordres.filter(o => o.statut === 'termine').length,
-    critique:     matieres.filter(m => m.etat_stock === 'critique' || m.etat_stock === 'rupture').length,
+    confirmees: commandes.length,
+    receptions: demandesExpediees.length,
+    planifie:   ordres.filter(o => o.statut === 'planifie').length,
+    en_cours:   ordres.filter(o => o.statut === 'en_cours').length,
+    termine:    ordres.filter(o => o.statut === 'termine').length,
+    critique:   matieres.filter(m => m.etat_stock === 'critique' || m.etat_stock === 'rupture').length,
   };
 
   return (
     <div style={{ fontFamily:"'Outfit',sans-serif", minHeight:'100vh', background:'var(--bg-base)' }}>
       <style>{DS}</style>
       <div style={{ height:2, background:'linear-gradient(90deg,#7c3aed,#ec4899,transparent)' }} />
+
+      {/* NAV */}
       <nav style={{ background:'var(--bg-base)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 24px', height:58 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -209,9 +242,7 @@ export default function ProductionPage() {
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <Link href="/production/analyse">
-              <button className="btn-pink">
-                <BarChart2 size={14}/> Analyse MRP <ArrowRight size={13}/>
-              </button>
+              <button className="btn-pink"><BarChart2 size={14}/> Analyse MRP <ArrowRight size={13}/></button>
             </Link>
             <span style={{ fontSize:12, color:'var(--text-secondary)' }}>{session?.user?.name}</span>
             <button onClick={() => signOut({ callbackUrl:'/' })} style={{ background:'rgba(255,255,255,.06)', border:'1px solid var(--border)', color:'var(--text-secondary)', borderRadius:8, padding:'6px 12px', cursor:'pointer', display:'flex', alignItems:'center', gap:5, fontSize:12, fontFamily:"'Outfit',sans-serif" }}>
@@ -244,14 +275,14 @@ export default function ProductionPage() {
           ))}
         </div>
 
+        {/* Card tabs — sans l'onglet MRP */}
         <div className="card">
           <div style={{ display:'flex', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
             {([
-              { id:'commandes',   label:'Commandes à lancer',    icon:<ShoppingCart size={13}/>,  badge: stats.confirmees },
-              { id:'receptions',  label:'Réceptions matières',   icon:<Package size={13}/>,       badge: stats.receptions },
-              { id:'fabrication', label:'Ordres de fabrication', icon:<Factory size={13}/>,       badge: 0 },
-              { id:'matieres',    label:'Stock matières',        icon:<Layers size={13}/>,        badge: 0 },
-              { id:'mrp',         label:'Calcul MRP',            icon:<BarChart3 size={13}/>,     badge: 0 },
+              { id:'commandes',   label:'Commandes à lancer',  icon:<ShoppingCart size={13}/>, badge: stats.confirmees },
+              { id:'receptions',  label:'Réceptions matières', icon:<Package size={13}/>,      badge: stats.receptions },
+              { id:'fabrication', label:'Ordres fabrication',  icon:<Factory size={13}/>,      badge: 0 },
+              { id:'matieres',    label:'Stock matières',      icon:<Layers size={13}/>,       badge: 0 },
             ] as {id:TabId;label:string;icon:any;badge:number}[]).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`tab-btn${activeTab===tab.id?' active':''}`}
@@ -268,17 +299,18 @@ export default function ProductionPage() {
 
           <div style={{ padding:24 }}>
 
-            {/* TAB — Commandes confirmées à lancer */}
+            {/* ── TAB Commandes à lancer ── */}
             {activeTab === 'commandes' && (
               <div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                   <div style={{ fontSize:13, color:'var(--text-secondary)' }}>
-                    Commandes confirmées par l'admin — à toi de lancer la fabrication
+                    Commandes confirmées par l'admin — lance la fabrication quand les matières sont disponibles
                   </div>
                   <button onClick={fetchAll} className="btn-ghost">
                     <RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }}/> Actualiser
                   </button>
                 </div>
+
                 {loading ? (
                   <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)' }}>Chargement...</div>
                 ) : commandes.length === 0 ? (
@@ -292,6 +324,7 @@ export default function ProductionPage() {
                       const nomClient = cmd.type_client === 'entreprise'
                         ? cmd.client_titre || `Client #${cmd.id}`
                         : `${cmd.client_prenom || ''} ${cmd.client_nom || ''}`.trim() || `Client #${cmd.id}`;
+                      const isLaunching = launching === cmd.id;
                       return (
                         <div key={cmd.id} style={{ background:'var(--bg-surface)', borderRadius:12, border:'1px solid rgba(168,85,247,.2)', padding:'18px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
                           <div style={{ display:'flex', gap:14, alignItems:'center' }}>
@@ -299,9 +332,7 @@ export default function ProductionPage() {
                             <div>
                               <div style={{ fontWeight:700, fontSize:14, color:'var(--text-primary)', display:'flex', alignItems:'center', gap:8 }}>
                                 Commande #{cmd.id}
-                                <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'rgba(168,85,247,.12)', color:'#a855f7', border:'1px solid rgba(168,85,247,.3)' }}>
-                                  Confirmée
-                                </span>
+                                <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'rgba(168,85,247,.12)', color:'#a855f7', border:'1px solid rgba(168,85,247,.3)' }}>Confirmée</span>
                               </div>
                               <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:4 }}>{nomClient}</div>
                               {cmd.lignes && cmd.lignes.length > 0 && (
@@ -320,9 +351,12 @@ export default function ProductionPage() {
                           </div>
                           <button
                             onClick={() => lancerFabrication(cmd.id)}
-                            disabled={launching === cmd.id}
-                            style={{ display:'inline-flex', alignItems:'center', gap:6, background:'linear-gradient(135deg,#ec4899,#7c3aed)', color:'white', border:'none', borderRadius:9, padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif", whiteSpace:'nowrap', opacity:launching===cmd.id?.5:1, transition:'all .2s' }}>
-                            <PlayCircle size={15}/> {launching === cmd.id ? 'Lancement...' : '⚙ Lancer fabrication'}
+                            disabled={isLaunching}
+                            style={{ display:'inline-flex', alignItems:'center', gap:6, background: isLaunching ? 'rgba(124,58,237,.3)' : 'linear-gradient(135deg,#ec4899,#7c3aed)', color:'white', border:'none', borderRadius:9, padding:'9px 18px', fontSize:13, fontWeight:600, cursor: isLaunching ? 'not-allowed' : 'pointer', fontFamily:"'Outfit',sans-serif", whiteSpace:'nowrap', opacity: isLaunching ? .7 : 1, transition:'all .2s' }}>
+                            {isLaunching
+                              ? <><RefreshCw size={14} style={{ animation:'spin 1s linear infinite' }}/> Lancement...</>
+                              : <><PlayCircle size={15}/> ⚙ Lancer fabrication</>
+                            }
                           </button>
                         </div>
                       );
@@ -332,20 +366,14 @@ export default function ProductionPage() {
               </div>
             )}
 
-            {/* ✅ TAB — Réceptions matières (nouveau) */}
+            {/* ── TAB Réceptions ── */}
             {activeTab === 'receptions' && (
               <div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                  <div style={{ fontSize:13, color:'var(--text-secondary)' }}>
-                    Livraisons expédiées par les fournisseurs — confirme la réception physique
-                  </div>
-                  <button onClick={fetchAll} className="btn-ghost">
-                    <RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }}/> Actualiser
-                  </button>
+                  <div style={{ fontSize:13, color:'var(--text-secondary)' }}>Livraisons expédiées par les fournisseurs — confirme la réception physique</div>
+                  <button onClick={fetchAll} className="btn-ghost"><RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }}/> Actualiser</button>
                 </div>
-                {loading ? (
-                  <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)' }}>Chargement...</div>
-                ) : demandesExpediees.length === 0 ? (
+                {demandesExpediees.length === 0 ? (
                   <div style={{ textAlign:'center', padding:56 }}>
                     <Package size={36} style={{ display:'block', margin:'0 auto 10px', opacity:.2, color:'var(--text-muted)' }}/>
                     <p style={{ color:'var(--text-muted)', fontSize:13 }}>Aucune livraison en attente de réception</p>
@@ -359,22 +387,16 @@ export default function ProductionPage() {
                           <div>
                             <div style={{ fontWeight:700, fontSize:14, color:'var(--text-primary)', display:'flex', alignItems:'center', gap:8 }}>
                               {d.matiere_titre}
-                              <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'rgba(6,182,212,.12)', color:'#06b6d4', border:'1px solid rgba(6,182,212,.3)' }}>
-                                Expédiée
-                              </span>
+                              <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'rgba(6,182,212,.12)', color:'#06b6d4', border:'1px solid rgba(6,182,212,.3)' }}>Expédiée</span>
                             </div>
-                            <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:4 }}>
-                              Fournisseur : <strong>{d.fournisseur_nom}</strong>
-                            </div>
+                            <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:4 }}>Fournisseur : <strong>{d.fournisseur_nom}</strong></div>
                             <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:3, display:'flex', gap:12 }}>
-                              <span>Qté commandée : <strong>{d.quantite} {d.matiere_unite}</strong></span>
-                              {d.date_prevue && <span>Prévue le : <strong>{new Date(d.date_prevue).toLocaleDateString('fr-FR')}</strong></span>}
+                              <span>Qté : <strong>{d.quantite} {d.matiere_unite}</strong></span>
+                              {d.date_prevue && <span>Prévue : <strong>{new Date(d.date_prevue).toLocaleDateString('fr-FR')}</strong></span>}
                             </div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => { setModalReception(d); setRecForm({ quantite_recue: String(d.quantite), notes: '' }); }}
-                          className="btn-green">
+                        <button onClick={() => { setModalReception(d); setRecForm({ quantite_recue: String(d.quantite), notes: '' }); }} className="btn-green">
                           <CheckCircle size={14}/> Confirmer réception
                         </button>
                       </div>
@@ -384,7 +406,7 @@ export default function ProductionPage() {
               </div>
             )}
 
-            {/* TAB — Ordres de fabrication */}
+            {/* ── TAB Fabrication ── */}
             {activeTab === 'fabrication' && (
               <div>
                 <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
@@ -392,59 +414,145 @@ export default function ProductionPage() {
                     <RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }}/> Actualiser
                   </button>
                 </div>
-                {loading ? (
-                  <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)' }}>Chargement...</div>
-                ) : ordres.length === 0 ? (
-                  <div style={{ textAlign:'center', padding:56 }}>
-                    <Factory size={36} style={{ display:'block', margin:'0 auto 10px', opacity:.2, color:'var(--text-muted)' }}/>
-                    <p style={{ color:'var(--text-muted)', fontSize:13 }}>Aucun ordre de fabrication</p>
-                  </div>
-                ) : (
-                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                    {ordres.map(o => {
-                      const cfg = STATUT_CFG[o.statut] || STATUT_CFG.planifie;
-                      return (
-                        <div key={o.id} style={{ background:'var(--bg-surface)', borderRadius:12, border:'1px solid var(--border)', padding:'18px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
-                          <div style={{ display:'flex', gap:14, alignItems:'center' }}>
-                            <div style={{ width:4, height:48, borderRadius:2, background:cfg.color, flexShrink:0 }}/>
-                            <div>
-                              <div style={{ fontWeight:700, fontSize:14, color:'var(--text-primary)' }}>{o.produit_nom}</div>
-                              <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:3 }}>
-                                Commande <strong>#{o.commande_ref}</strong> · Qté : <strong>{o.quantite} {o.produit_unite}</strong>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+
+                  {/* Urgences admin */}
+                  <div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                      <div style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 8px #ef4444' }}/>
+                      <span style={{ fontWeight:700, fontSize:13, color:'#ef4444' }}>Urgences admin</span>
+                      <span style={{ background:'rgba(239,68,68,.15)', color:'#ef4444', border:'1px solid rgba(239,68,68,.3)', borderRadius:20, fontSize:11, fontWeight:700, padding:'1px 8px' }}>
+                        {ordres.filter(o => o.statut === 'urgent').length}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:12 }}>
+                      Commandes transmises par l'admin — stock insuffisant détecté
+                    </div>
+                    {ordres.filter(o => o.statut === 'urgent').length === 0 ? (
+                      <div style={{ textAlign:'center', padding:'40px 20px', background:'rgba(239,68,68,.04)', border:'1px dashed rgba(239,68,68,.2)', borderRadius:12 }}>
+                        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Aucune urgence en cours ✓</span>
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                        {ordres
+                          .filter(o => o.statut === 'urgent')
+                          .sort((a, b) => {
+                            const scoreA = a.quantite * 10 + Math.floor((Date.now() - new Date(a.created_at).getTime()) / 3600000);
+                            const scoreB = b.quantite * 10 + Math.floor((Date.now() - new Date(b.created_at).getTime()) / 3600000);
+                            return scoreB - scoreA;
+                          })
+                          .map((o, idx) => {
+                            const score = o.quantite * 10 + Math.floor((Date.now() - new Date(o.created_at).getTime()) / 3600000);
+                            return (
+                              <div key={o.id} style={{ background:'rgba(239,68,68,.06)', borderRadius:12, border:'1px solid rgba(239,68,68,.25)', padding:'16px 18px', position:'relative', overflow:'hidden' }}>
+                                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, background: idx===0?'#ef4444':idx===1?'#f97316':'#f59e0b' }}/>
+                                <div style={{ paddingLeft:8 }}>
+                                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+                                    <div>
+                                      <div style={{ fontWeight:700, fontSize:13.5, color:'var(--text-primary)' }}>{o.produit_nom}</div>
+                                      <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:3 }}>
+                                        Commande <strong style={{ color:'#ef4444' }}>#{o.commande_ref}</strong> · <strong>{o.quantite} {o.produit_unite}</strong> à fabriquer
+                                      </div>
+                                    </div>
+                                    <div style={{ textAlign:'right', flexShrink:0 }}>
+                                      <div style={{ fontSize:10, color:'var(--text-muted)', marginBottom:2 }}>Score priorité</div>
+                                      <div style={{ fontWeight:800, fontSize:16, color:'#ef4444' }}>{score}</div>
+                                    </div>
+                                  </div>
+                                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10 }}>
+                                    <span style={{ fontSize:11, color:'#f59e0b', fontWeight:600 }}>
+                                      🕐 {new Date(o.created_at).toLocaleDateString('fr-FR')}
+                                    </span>
+                                    <div style={{ display:'flex', gap:6 }}>
+                                      <button onClick={() => handleStatut(o.id, 'en_cours')}
+                                        style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(239,68,68,.15)', border:'1px solid rgba(239,68,68,.4)', color:'#ef4444', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                                        <PlayCircle size={13}/> Démarrer
+                                      </button>
+                                      <button onClick={() => { setModalValidation(o); setValForm({ quantite_produite:String(o.quantite), quantite_rebutee:'0', observations:'' }); }}
+                                        style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', color:'#10b981', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                                        <CheckCircle size={13}/> Valider
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                              <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600, background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, marginTop:5 }}>
-                                {cfg.label}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-                            {o.statut === 'planifie' && (
-                              <button onClick={() => handleStatut(o.id, 'en_cours')}
-                                style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(168,85,247,.1)', border:'1px solid rgba(168,85,247,.25)', color:'#a855f7', borderRadius:8, padding:'7px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
-                                <PlayCircle size={14}/> Démarrer
-                              </button>
-                            )}
-                            {o.statut === 'en_cours' && (
-                              <button onClick={() => { setModalValidation(o); setValForm({ quantite_produite:String(o.quantite), quantite_rebutee:'0', observations:'' }); }}
-                                style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', color:'#10b981', borderRadius:8, padding:'7px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
-                                <CheckCircle size={14}/> Valider production
-                              </button>
-                            )}
-                            {o.statut === 'termine' && (
-                              <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12.5, color:'#10b981', fontWeight:600 }}>
-                                <CheckCircle size={14}/> Validé
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                            );
+                          })}
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {/* Planification MRP */}
+                  <div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                      <div style={{ width:10, height:10, borderRadius:'50%', background:'#a855f7', boxShadow:'0 0 8px #a855f7' }}/>
+                      <span style={{ fontWeight:700, fontSize:13, color:'#a855f7' }}>Planification MRP</span>
+                      <span style={{ background:'rgba(168,85,247,.15)', color:'#a855f7', border:'1px solid rgba(168,85,247,.3)', borderRadius:20, fontSize:11, fontWeight:700, padding:'1px 8px' }}>
+                        {ordres.filter(o => o.statut !== 'urgent').length}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:12 }}>
+                      Ordres prévisionnels issus de l'analyse et du forecasting mensuel
+                    </div>
+                    {ordres.filter(o => o.statut !== 'urgent').length === 0 ? (
+                      <div style={{ textAlign:'center', padding:'40px 20px', background:'rgba(168,85,247,.04)', border:'1px dashed rgba(168,85,247,.2)', borderRadius:12 }}>
+                        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Aucun ordre planifié</span>
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                        {ordres.filter(o => o.statut !== 'urgent').map(o => {
+                          const cfg = STATUT_CFG[o.statut] || STATUT_CFG.planifie;
+                          return (
+                            <div key={o.id} style={{ background:'var(--bg-surface)', borderRadius:12, border:'1px solid var(--border)', padding:'16px 18px', position:'relative', overflow:'hidden' }}>
+                              <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, background:cfg.color }}/>
+                              <div style={{ paddingLeft:8 }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+                                  <div>
+                                    <div style={{ fontWeight:700, fontSize:13.5, color:'var(--text-primary)' }}>{o.produit_nom}</div>
+                                    <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:3 }}>
+                                      Qté prévue : <strong>{o.quantite} {o.produit_unite}</strong>
+                                    </div>
+                                  </div>
+                                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 9px', borderRadius:20, fontSize:11, fontWeight:600, background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, flexShrink:0 }}>
+                                    {cfg.label}
+                                  </span>
+                                </div>
+                                {o.date_debut && o.date_fin && (
+                                  <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:10 }}>
+                                    📅 {new Date(o.date_debut).toLocaleDateString('fr-FR')} → {new Date(o.date_fin).toLocaleDateString('fr-FR')}
+                                  </div>
+                                )}
+                                <div style={{ display:'flex', justifyContent:'flex-end', gap:6 }}>
+                                  {o.statut === 'planifie' && (
+                                    <button onClick={() => handleStatut(o.id, 'en_cours')}
+                                      style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(168,85,247,.1)', border:'1px solid rgba(168,85,247,.25)', color:'#a855f7', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                                      <PlayCircle size={13}/> Démarrer
+                                    </button>
+                                  )}
+                                  {o.statut === 'en_cours' && (
+                                    <button onClick={() => { setModalValidation(o); setValForm({ quantite_produite:String(o.quantite), quantite_rebutee:'0', observations:'' }); }}
+                                      style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', color:'#10b981', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                                      <CheckCircle size={13}/> Valider
+                                    </button>
+                                  )}
+                                  {o.statut === 'termine' && (
+                                    <span style={{ fontSize:12, color:'#10b981', fontWeight:600, display:'flex', alignItems:'center', gap:4 }}>
+                                      <CheckCircle size={13}/> Terminé
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* TAB — Matières */}
+            {/* ── TAB Matières ── */}
             {activeTab === 'matieres' && (
               <div>
                 {stats.critique > 0 && (
@@ -481,75 +589,59 @@ export default function ProductionPage() {
               </div>
             )}
 
-            {/* TAB — MRP */}
-            {activeTab === 'mrp' && (
-              <div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                  <div>
-                    <div style={{ fontWeight:700, fontSize:15, color:'var(--text-primary)' }}>Calcul des besoins en matières (MRP)</div>
-                    <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>Basé sur toutes les commandes actives</div>
-                  </div>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <button onClick={fetchMRP} className="btn-ghost" disabled={mrpLoading}>
-                      <RefreshCw size={13} style={{ animation:mrpLoading?'spin 1s linear infinite':'none' }}/> Recalculer
-                    </button>
-                    <button onClick={lancerMRP} className="btn-primary" disabled={mrpLoading}>
-                      <BarChart3 size={14}/> Générer plan appro
-                    </button>
-                  </div>
-                </div>
-                {mrpLoading ? (
-                  <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)' }}>Calcul en cours...</div>
-                ) : !mrp ? (
-                  <div style={{ textAlign:'center', padding:48 }}>
-                    <BarChart3 size={36} style={{ display:'block', margin:'0 auto 10px', opacity:.2, color:'var(--text-muted)' }}/>
-                    <p style={{ color:'var(--text-muted)', fontSize:13 }}>Cliquez "Recalculer" pour lancer l'analyse</p>
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
-                      {[
-                        { label:'Matières analysées',  value:mrp.resume?.total_matieres||0,     color:'#a855f7', bg:'rgba(168,85,247,.1)', border:'rgba(168,85,247,.2)' },
-                        { label:'Stocks suffisants',   value:mrp.resume?.matieres_ok||0,         color:'#10b981', bg:'rgba(16,185,129,.1)', border:'rgba(16,185,129,.2)' },
-                        { label:'Approvisionnements',  value:mrp.resume?.matieres_manquantes||0, color:'#ef4444', bg:'rgba(239,68,68,.1)',  border:'rgba(239,68,68,.2)'  },
-                        { label:'Cmdes faisables',     value:mrp.resume?.commandes_faisables||0, color:'#06b6d4', bg:'rgba(6,182,212,.1)',  border:'rgba(6,182,212,.2)'  },
-                      ].map((s,i) => (
-                        <div key={i} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:12, padding:'14px 16px' }}>
-                          <div style={{ fontSize:22, fontWeight:800, color:s.color }}>{s.value}</div>
-                          <div style={{ fontSize:11.5, color:'var(--text-secondary)', fontWeight:500, marginTop:2 }}>{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {mrp.besoins?.length > 0 && (
-                      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                        {mrp.besoins.map((b:any,i:number) => (
-                          <div key={i} style={{ background:b.suffisant?'rgba(16,185,129,.06)':'rgba(239,68,68,.06)', border:`1px solid ${b.suffisant?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'}`, borderRadius:12, padding:'14px 18px' }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                              <div>
-                                <div style={{ fontWeight:600, fontSize:13, color:'var(--text-primary)' }}>{b.matiere_titre}</div>
-                                <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:4, display:'flex', gap:16 }}>
-                                  <span>Besoin : <strong>{b.quantite_besoin} {b.unite}</strong></span>
-                                  <span>Stock : <strong style={{ color:b.suffisant?'#10b981':'#ef4444' }}>{b.stock_actuel} {b.unite}</strong></span>
-                                  {!b.suffisant && <span>Manque : <strong style={{ color:'#ef4444' }}>{b.quantite_manque} {b.unite}</strong></span>}
-                                </div>
-                              </div>
-                              <span style={{ padding:'3px 9px', borderRadius:20, fontSize:11, fontWeight:600, background:b.suffisant?'#10b981':'#ef4444', color:'white', flexShrink:0 }}>
-                                {b.suffisant?'✓ Suffisant':'⚠ À commander'}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* ✅ Modal réception matière — responsable prod */}
+      {/* ═══ MODALS ═══ */}
+
+      {/* Modal matières manquantes — affiché quand le lancement est bloqué */}
+      {modalMatieres && (
+        <div className="overlay" onClick={() => setModalMatieres(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:520 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+              <h2 style={{ fontWeight:700, fontSize:18, color:'#ef4444', margin:0, display:'flex', alignItems:'center', gap:8 }}>
+                <AlertTriangle size={18}/> Matières insuffisantes
+              </h2>
+              <button onClick={() => setModalMatieres(null)} style={{ width:28, height:28, borderRadius:8, background:'rgba(255,255,255,.06)', border:'1px solid var(--border)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-secondary)' }}><X size={14}/></button>
+            </div>
+            <div style={{ background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.2)', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:12.5, color:'var(--text-secondary)' }}>
+              La fabrication de la commande <strong style={{ color:'var(--text-primary)' }}>#{modalMatieres.commande_id}</strong> ne peut pas démarrer — stocks insuffisants pour ces matières :
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
+              {modalMatieres.matieres.map((m, i) => (
+                <div key={i} style={{ background:'rgba(239,68,68,.06)', border:'1px solid rgba(239,68,68,.2)', borderRadius:10, padding:'12px 14px' }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:'var(--text-primary)', marginBottom:6 }}>{m.matiere}</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+                    {[
+                      { label:'Stock actuel', value:`${m.stock_actuel} ${m.unite}`,     color:'var(--text-primary)' },
+                      { label:'Requis',       value:`${m.quantite_requise} ${m.unite}`, color:'#06b6d4'             },
+                      { label:'Manque',       value:`${m.manque} ${m.unite}`,           color:'#ef4444'             },
+                    ].map((s, j) => (
+                      <div key={j} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:7, padding:'6px 10px', textAlign:'center' }}>
+                        <div style={{ fontSize:10, color:'var(--text-muted)', marginBottom:2 }}>{s.label}</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:s.color }}>{s.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop:10, display:'flex', justifyContent:'flex-end' }}>
+                    <button className="btn-orange" onClick={() => {
+                      commanderFournisseur(0, m.manque, m.matiere);
+                    }}>
+                      <Send size={11}/> Commander au fournisseur
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setModalMatieres(null)} className="btn-ghost">Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal réception */}
       {modalReception && (
         <div className="overlay" onClick={() => setModalReception(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -575,7 +667,7 @@ export default function ProductionPage() {
               </div>
               <div style={{ background:'rgba(16,185,129,.08)', border:'1px solid rgba(16,185,129,.2)', borderRadius:10, padding:'10px 14px', display:'flex', gap:8 }}>
                 <Info size={14} color="#10b981" style={{ flexShrink:0, marginTop:1 }}/>
-                <p style={{ fontSize:12, color:'#10b981', margin:0 }}>La confirmation mettra à jour le stock de cette matière première et clôturera la demande d'approvisionnement.</p>
+                <p style={{ fontSize:12, color:'#10b981', margin:0 }}>La confirmation mettra à jour le stock de cette matière première.</p>
               </div>
             </div>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
@@ -598,20 +690,22 @@ export default function ProductionPage() {
             </div>
             <div style={{ background:'var(--bg-surface)', borderRadius:10, padding:'12px 14px', marginBottom:18, border:'1px solid var(--border)' }}>
               <div style={{ fontWeight:600, fontSize:13, color:'var(--text-primary)' }}>{modalValidation.produit_nom}</div>
-              <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:3 }}>Commande #{modalValidation.commande_ref} · Prévu : {modalValidation.quantite} {modalValidation.produit_unite}</div>
+              <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:3 }}>
+                Commande #{modalValidation.commande_ref} · Prévu : {modalValidation.quantite} {modalValidation.produit_unite}
+              </div>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:13 }}>
               <div>
                 <label>Quantité produite *</label>
-                <input className="input-field" type="number" min="0" value={valForm.quantite_produite} onChange={e => setValForm({...valForm,quantite_produite:e.target.value})}/>
+                <input className="input-field" type="number" min="0" value={valForm.quantite_produite} onChange={e => setValForm({...valForm, quantite_produite:e.target.value})}/>
               </div>
               <div>
                 <label>Quantité rebutée</label>
-                <input className="input-field" type="number" min="0" value={valForm.quantite_rebutee} onChange={e => setValForm({...valForm,quantite_rebutee:e.target.value})}/>
+                <input className="input-field" type="number" min="0" value={valForm.quantite_rebutee} onChange={e => setValForm({...valForm, quantite_rebutee:e.target.value})}/>
               </div>
               <div>
                 <label>Observations</label>
-                <textarea className="input-field" rows={3} value={valForm.observations} onChange={e => setValForm({...valForm,observations:e.target.value} as any)}/>
+                <textarea className="input-field" rows={3} value={valForm.observations} onChange={e => setValForm({...valForm, observations:e.target.value} as any)}/>
               </div>
               <div style={{ background:'rgba(124,58,237,.08)', border:'1px solid rgba(124,58,237,.2)', borderRadius:10, padding:'10px 14px', display:'flex', gap:8 }}>
                 <Info size={14} color="#a855f7" style={{ flexShrink:0, marginTop:1 }}/>
@@ -627,6 +721,7 @@ export default function ProductionPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

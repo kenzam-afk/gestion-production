@@ -82,6 +82,16 @@ export default function CommandesPage() {
     });
     fetchAll();
   }
+  async function validerCommande(id: number) {
+  const res = await fetch(`/api/commandes/${id}/valider`, { method: "POST" });
+  const data = await res.json();
+  if (data.ordres_fabrication_crees > 0) {
+    alert(`✅ Commande validée !\n🔴 ${data.ordres_fabrication_crees} ordre(s) de fabrication urgent(s) transmis au responsable de production.`);
+  } else {
+    alert("✅ Stock suffisant — commande validée directement.");
+  }
+  fetchAll();
+}
 
   const statutsList = ["tous", ...Object.keys(STATUT_CFG)];
   const stats = {
@@ -231,11 +241,21 @@ export default function CommandesPage() {
                   <td style={{ padding: "13px 16px" }}>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                       {nextActions.map((action, i) => (
-                        <button key={i} onClick={() => changerStatut(cmd.id, action.statut)} className="action-btn"
-                          style={{ background: action.color + "18", color: action.color, border: `1px solid ${action.color}40` }}>
-                          {action.label}
-                        </button>
-                      ))}
+  <button
+    key={i}
+    onClick={() =>
+      // Si c'est la confirmation → appelle validerCommande (vérifie stock + crée OF)
+      // Sinon → simple changement de statut (ex: annuler)
+      action.statut === "confirmee"
+        ? validerCommande(cmd.id)
+        : changerStatut(cmd.id, action.statut)
+    }
+    className="action-btn"
+    style={{ background: action.color + "18", color: action.color, border: `1px solid ${action.color}40` }}
+  >
+    {action.label}
+  </button>
+))}
                       <button onClick={() => handleDelete(cmd.id)} className="btn-danger"><Trash2 size={12} /></button>
                     </div>
                   </td>

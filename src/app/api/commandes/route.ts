@@ -49,16 +49,11 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'client_id et produits sont requis' }, { status: 400 });
     }
 
+    // ✅ On vérifie juste que le produit existe — plus de blocage stock
+    // C'est l'admin qui gère le manque au moment de la validation
     for (const ligne of produits) {
-      const [produit] = await sql`SELECT id, nom, stock_disponible FROM produits WHERE id = ${ligne.produit_id}`;
+      const [produit] = await sql`SELECT id, nom FROM produits WHERE id = ${ligne.produit_id}`;
       if (!produit) return Response.json({ error: `Produit #${ligne.produit_id} introuvable` }, { status: 404 });
-      if (produit.stock_disponible < ligne.quantite) {
-        return Response.json({
-          error: `Stock insuffisant pour "${produit.nom}" : ${produit.stock_disponible} disponible(s), ${ligne.quantite} demandé(s)`,
-          produit_id: produit.id,
-          stock_disponible: produit.stock_disponible,
-        }, { status: 400 });
-      }
     }
 
     const total = produits.reduce((acc: number, p: any) => acc + (Number(p.prix_unitaire) * Number(p.quantite)), 0);
@@ -70,18 +65,36 @@ export async function POST(req: NextRequest) {
     `;
 
     for (const ligne of produits) {
-      await sql`INSERT INTO commande_produits (commande_id, produit_id, quantite, prix_unitaire) VALUES (${commande.id}, ${ligne.produit_id}, ${ligne.quantite}, ${ligne.prix_unitaire})`;
+      await sql`
+        INSERT INTO commande_produits (commande_id, produit_id, quantite, prix_unitaire)
+        VALUES (${commande.id}, ${ligne.produit_id}, ${ligne.quantite}, ${ligne.prix_unitaire})
+      `;
     }
 
     const numBon = `BC-${new Date().getFullYear()}-${String(commande.id).padStart(4, '0')}`;
-    const [bon] = await sql`INSERT INTO bons_commande (commande_id, numero_bon, date_emission, conditions_paiement) VALUES (${commande.id}, ${numBon}, CURRENT_DATE, '30 jours') RETURNING *`;
+    const [bon] = await sql`
+      INSERT INTO bons_commande (commande_id, numero_bon, date_emission, conditions_paiement)
+      VALUES (${commande.id}, ${numBon}, CURRENT_DATE, '30 jours')
+      RETURNING *
+    `;
 
+    // ✅ On n'enlève plus le stock ici — ce sera fait lors de la validation par l'admin
+    // On enregistre juste le mouvement comme "réservation"
     for (const ligne of produits) {
-      await sql`UPDATE produits SET stock_disponible = stock_disponible - ${ligne.quantite} WHERE id = ${ligne.produit_id}`;
-      await sql`INSERT INTO mouvements_stock (produit_id, type, quantite, raison, reference_id) VALUES (${ligne.produit_id}, 'sortie', ${ligne.quantite}, 'commande', ${commande.id})`;
+      await sql`
+        INSERT INTO mouvements_stock (produit_id, type, quantite, raison, reference_id)
+        VALUES (${ligne.produit_id}, 'reservation', ${ligne.quantite}, 'commande_client', ${commande.id})
+      `;
     }
 
-    return Response.json({ id: commande.id, total: commande.total, statut: commande.statut, numero_bon_commande: numBon, bon_commande_id: bon.id }, { status: 201 });
+    return Response.json({
+      id: commande.id,
+      total: commande.total,
+      statut: commande.statut,
+      numero_bon_commande: numBon,
+      bon_commande_id: bon.id
+    }, { status: 201 });
+
   } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }

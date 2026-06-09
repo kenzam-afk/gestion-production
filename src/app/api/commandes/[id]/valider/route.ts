@@ -1,0 +1,113 @@
+import sql from '@/lib/db';
+import { NextRequest } from 'next/server';
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const commande_id = parseInt(id);
+
+  try {
+    const [commande] = await sql`
+      SELECT * FROM commandes WHERE id = ${commande_id}
+    `;
+    if (!commande) return Response.json({ error: 'Commande introuvable' }, { status: 404 });
+    if (commande.statut !== 'en_attente') return Response.json({ error: 'Commande déjà traitée' }, { status: 400 });
+
+    const lignes = await sql`
+      SELECT cp.produit_id, cp.quantite, p.nom AS produit_nom
+      FROM commande_produits cp
+      JOIN produits p ON p.id = cp.produit_id
+      WHERE cp.commande_id = ${commande_id}
+    `;
+
+    const ordresCrees: any[] = [];
+
+    for (const ligne of lignes) {
+      const [produit] = await sql`
+  SELECT stock_disponible FROM produits WHERE id = ${ligne.produit_id}
+`;
+const stockDispo = produit?.stock_disponible ?? 0;
+      const manque = ligne.quantite - stockDispo;
+
+      if (manque > 0) {
+        const ageHeures = Math.floor(
+          (Date.now() - new Date(commande.created_at).getTime()) / 3600000
+        );
+        const scorePriorite = manque * 10 + ageHeures;
+
+        const dateDebut = new Date().toISOString().split('T')[0];
+        const dateFin = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+        const [ordre] = await sql`
+          INSERT INTO ordres_fabrication (commande_id, produit_id, quantite, statut, date_debut, date_fin, notes)
+          VALUES (
+            ${commande_id}, ${ligne.produit_id}, ${manque}, 'urgent',
+            ${dateDebut}, ${dateFin},
+            ${'PRIORITÉ ABSOLUE — Manque ' + manque + ' unité(s) de "' + ligne.produit_nom + '" pour commande #' + commande_id + ' | Score: ' + scorePriorite}
+          )
+          RETURNING *
+        `;
+
+        ordresCrees.push({ ...ordre, score_priorite: scorePriorite });
+
+        // Enregistrer dans mouvements_stock → affecte le forecasting
+        await sql`
+          INSERT INTO mouvements_stock (produit_id, type, quantite, raison, reference_id)
+          VALUES (${ligne.produit_id}, 'besoin_production', ${manque},
+            ${'Manque détecté validation commande #' + commande_id}, ${commande_id})
+        `;
+
+        // Notifier le responsable de production
+        await sql`
+          INSERT INTO notifications (titre, message, type, destinataire_role, entite_type, entite_id)
+          VALUES (
+            ${'🔴 Ordre urgent'},
+            ${'Fabriquer ' + manque + ' × "' + ligne.produit_nom + '" — commande #' + commande_id + ' | Score: ' + scorePriorite},
+            'urgent', 'responsable_production', 'ordre_fabrication', ${ordre.id}
+          )
+        `;
+
+        // Réserver le stock partiel disponible
+        if (stockDispo > 0) {
+          await sql`
+            UPDATE stock_etats
+            SET qte_reservee = qte_reservee + ${stockDispo},
+                qte_disponible = qte_disponible - ${stockDispo},
+                updated_at = NOW()
+            WHERE produit_id = ${ligne.produit_id}
+          `;
+        }
+      } else {
+        // Stock suffisant → réserver directement
+        await sql`
+          UPDATE stock_etats
+          SET qte_reservee = qte_reservee + ${ligne.quantite},
+              qte_disponible = qte_disponible - ${ligne.quantite},
+              updated_at = NOW()
+          WHERE produit_id = ${ligne.produit_id}
+        `;
+      }
+    }
+
+    const nouveauStatut = ordresCrees.length > 0 ? 'en_production' : 'validee';
+    await sql`
+      UPDATE commandes SET statut = ${nouveauStatut}, updated_at = NOW()
+      WHERE id = ${commande_id}
+    `;
+
+    return Response.json({
+      success: true,
+      commande_id,
+      statut: nouveauStatut,
+      ordres_fabrication_crees: ordresCrees.length,
+      message: ordresCrees.length > 0
+        ? `${ordresCrees.length} ordre(s) urgent(s) créés et transmis au responsable de production.`
+        : 'Stock suffisant — commande validée.',
+    });
+  } catch (error: any) {
+    console.error('VALIDER ERROR:', error);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
