@@ -67,8 +67,7 @@ label{font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 `;
 
-// Onglets sans MRP
-type TabId = 'commandes' | 'receptions' | 'fabrication' | 'matieres';
+type TabId = 'receptions' | 'fabrication' | 'matieres';
 
 export default function ProductionPage() {
   const { data: session } = useSession();
@@ -78,7 +77,7 @@ export default function ProductionPage() {
   const [demandesExpediees, setDemandesExpediees] = useState<DemandeExpediee[]>([]);
   const [fournisseurs, setFournisseurs]           = useState<any[]>([]);
   const [loading, setLoading]                     = useState(true);
-  const [activeTab, setActiveTab]                 = useState<TabId>('commandes');
+  const [activeTab, setActiveTab] = useState<TabId>('fabrication');
 
   const [modalValidation, setModalValidation]   = useState<OrdreFab | null>(null);
   const [valForm, setValForm]                   = useState({ quantite_produite: '', quantite_rebutee: '0', observations: '' });
@@ -86,8 +85,8 @@ export default function ProductionPage() {
   const [recForm, setRecForm]                   = useState({ quantite_recue: '', notes: '' });
   const [saving, setSaving]                     = useState(false);
   const [launching, setLaunching]               = useState<number | null>(null);
+  const [commandesEnFab, setCommandesEnFab]     = useState<CommandeConfirmee[]>([]);
 
-  // ── Alerte matières manquantes lors du lancement ──────────
   const [modalMatieres, setModalMatieres] = useState<{
     commande_id: number;
     matieres: { matiere: string; stock_actuel: number; quantite_requise: number; manque: number; unite: string }[];
@@ -106,7 +105,9 @@ export default function ProductionPage() {
       setOrdres(Array.isArray(ro) ? ro : []);
       setMatieres(Array.isArray(rm) ? rm : []);
       const all = Array.isArray(rc) ? rc : [];
-      setCommandes(all.filter((c: any) => c.statut === 'confirmee'));
+      setCommandes(all.filter((c: any) => c.statut === 'confirmee' && c.source_urgence === true));
+      const enFabrication = all.filter((c: any) => c.statut === 'en_fabrication');
+      setCommandesEnFab(enFabrication);
       setDemandesExpediees(Array.isArray(rd) ? rd : []);
       setFournisseurs(Array.isArray(rf) ? rf : []);
     } finally { setLoading(false); }
@@ -114,9 +115,6 @@ export default function ProductionPage() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  // ── Lancer fabrication ────────────────────────────────────
-  // PUT /api/commandes/:id avec statut en_fabrication
-  // L'API crée les ordres_fabrication automatiquement et vérifie les matières
   async function lancerFabrication(commandeId: number) {
     setLaunching(commandeId);
     try {
@@ -124,13 +122,12 @@ export default function ProductionPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: 'en_fabrication' }),
-        credentials: 'include', // transmet les cookies de session
+        credentials: 'include',
       });
       const data = await res.json();
 
       if (!res.ok) {
         if (data.code === 'MATIERES_INSUFFISANTES') {
-          // Affiche la modale matières manquantes au lieu d'un alert
           setModalMatieres({ commande_id: commandeId, matieres: data.matieres_manquantes });
         } else {
           alert('Erreur : ' + (data.error || 'Inconnue'));
@@ -138,7 +135,6 @@ export default function ProductionPage() {
         return;
       }
 
-      // Succès → basculer sur l'onglet fabrication et rafraîchir
       setActiveTab('fabrication');
       await fetchAll();
     } finally {
@@ -156,7 +152,7 @@ export default function ProductionPage() {
     fetchAll();
   }
 
-  async function handleValidation() { 
+  async function handleValidation() {
     if (!modalValidation || !valForm.quantite_produite) return;
     setSaving(true);
     try {
@@ -275,11 +271,10 @@ export default function ProductionPage() {
           ))}
         </div>
 
-        {/* Card tabs — sans l'onglet MRP */}
+        {/* Card tabs */}
         <div className="card">
           <div style={{ display:'flex', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
             {([
-              { id:'commandes',   label:'Commandes à lancer',  icon:<ShoppingCart size={13}/>, badge: stats.confirmees },
               { id:'receptions',  label:'Réceptions matières', icon:<Package size={13}/>,      badge: stats.receptions },
               { id:'fabrication', label:'Ordres fabrication',  icon:<Factory size={13}/>,      badge: 0 },
               { id:'matieres',    label:'Stock matières',      icon:<Layers size={13}/>,       badge: 0 },
@@ -298,73 +293,6 @@ export default function ProductionPage() {
           </div>
 
           <div style={{ padding:24 }}>
-
-            {/* ── TAB Commandes à lancer ── */}
-            {activeTab === 'commandes' && (
-              <div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                  <div style={{ fontSize:13, color:'var(--text-secondary)' }}>
-                    Commandes confirmées par l'admin — lance la fabrication quand les matières sont disponibles
-                  </div>
-                  <button onClick={fetchAll} className="btn-ghost">
-                    <RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }}/> Actualiser
-                  </button>
-                </div>
-
-                {loading ? (
-                  <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)' }}>Chargement...</div>
-                ) : commandes.length === 0 ? (
-                  <div style={{ textAlign:'center', padding:56 }}>
-                    <ShoppingCart size={36} style={{ display:'block', margin:'0 auto 10px', opacity:.2, color:'var(--text-muted)' }}/>
-                    <p style={{ color:'var(--text-muted)', fontSize:13 }}>Aucune commande confirmée en attente</p>
-                  </div>
-                ) : (
-                  <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                    {commandes.map(cmd => {
-                      const nomClient = cmd.type_client === 'entreprise'
-                        ? cmd.client_titre || `Client #${cmd.id}`
-                        : `${cmd.client_prenom || ''} ${cmd.client_nom || ''}`.trim() || `Client #${cmd.id}`;
-                      const isLaunching = launching === cmd.id;
-                      return (
-                        <div key={cmd.id} style={{ background:'var(--bg-surface)', borderRadius:12, border:'1px solid rgba(168,85,247,.2)', padding:'18px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
-                          <div style={{ display:'flex', gap:14, alignItems:'center' }}>
-                            <div style={{ width:4, height:52, borderRadius:2, background:'#a855f7', flexShrink:0 }}/>
-                            <div>
-                              <div style={{ fontWeight:700, fontSize:14, color:'var(--text-primary)', display:'flex', alignItems:'center', gap:8 }}>
-                                Commande #{cmd.id}
-                                <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:20, background:'rgba(168,85,247,.12)', color:'#a855f7', border:'1px solid rgba(168,85,247,.3)' }}>Confirmée</span>
-                              </div>
-                              <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:4 }}>{nomClient}</div>
-                              {cmd.lignes && cmd.lignes.length > 0 && (
-                                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:6 }}>
-                                  {cmd.lignes.map((l, i) => (
-                                    <span key={i} style={{ fontSize:11.5, fontWeight:500, padding:'2px 8px', borderRadius:6, background:'rgba(124,58,237,.1)', color:'var(--violet-light)', border:'1px solid rgba(124,58,237,.2)' }}>
-                                      {l.produit_nom} ×{l.quantite}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>
-                                {cmd.created_at ? new Date(cmd.created_at).toLocaleDateString('fr-FR') : '—'} · {Number(cmd.total).toLocaleString('fr-DZ')} DA
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => lancerFabrication(cmd.id)}
-                            disabled={isLaunching}
-                            style={{ display:'inline-flex', alignItems:'center', gap:6, background: isLaunching ? 'rgba(124,58,237,.3)' : 'linear-gradient(135deg,#ec4899,#7c3aed)', color:'white', border:'none', borderRadius:9, padding:'9px 18px', fontSize:13, fontWeight:600, cursor: isLaunching ? 'not-allowed' : 'pointer', fontFamily:"'Outfit',sans-serif", whiteSpace:'nowrap', opacity: isLaunching ? .7 : 1, transition:'all .2s' }}>
-                            {isLaunching
-                              ? <><RefreshCw size={14} style={{ animation:'spin 1s linear infinite' }}/> Lancement...</>
-                              : <><PlayCircle size={15}/> ⚙ Lancer fabrication</>
-                            }
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* ── TAB Réceptions ── */}
             {activeTab === 'receptions' && (
@@ -595,7 +523,7 @@ export default function ProductionPage() {
 
       {/* ═══ MODALS ═══ */}
 
-      {/* Modal matières manquantes — affiché quand le lancement est bloqué */}
+      {/* Modal matières manquantes */}
       {modalMatieres && (
         <div className="overlay" onClick={() => setModalMatieres(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:520 }}>

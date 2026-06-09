@@ -12,16 +12,32 @@ export async function POST(
     const [commande] = await sql`
       SELECT * FROM commandes WHERE id = ${commande_id}
     `;
-    if (!commande) return Response.json({ error: 'Commande introuvable' }, { status: 404 });
-    if (commande.statut !== 'en_attente') return Response.json({ error: 'Commande déjà traitée' }, { status: 400 });
+    if (!commande)
+  return Response.json(
+    { error: 'Commande introuvable' },
+    { status: 404 }
+  );
 
-    const lignes = await sql`
-      SELECT cp.produit_id, cp.quantite, p.nom AS produit_nom
-      FROM commande_produits cp
-      JOIN produits p ON p.id = cp.produit_id
-      WHERE cp.commande_id = ${commande_id}
-    `;
+if (commande.statut !== 'en_attente')
+  return Response.json(
+    { error: 'Commande déjà traitée' },
+    { status: 400 }
+  );
 
+// Commande validée
+await sql`
+  UPDATE commandes
+  SET statut = 'confirmee',
+      updated_at = NOW()
+  WHERE id = ${commande_id}
+`;
+
+const lignes = await sql`
+  SELECT cp.produit_id, cp.quantite, p.nom AS produit_nom
+  FROM commande_produits cp
+  JOIN produits p ON p.id = cp.produit_id
+  WHERE cp.commande_id = ${commande_id}
+`;
     const ordresCrees: any[] = [];
 
     for (const ligne of lignes) {
@@ -92,9 +108,15 @@ const stockDispo = produit?.stock_disponible ?? 0;
     }
 
 
-const nouveauStatut = ordresCrees.length > 0 ? 'en_fabrication' : 'pret_livraison';
+const nouveauStatut = ordresCrees.length > 0
+  ? 'en_fabrication'
+  : 'pret_livraison';
+
 await sql`
-  UPDATE commandes SET statut = ${nouveauStatut}, updated_at = NOW()
+  UPDATE commandes
+  SET statut = ${nouveauStatut},
+      source_urgence = ${ordresCrees.length > 0},
+      updated_at = NOW()
   WHERE id = ${commande_id}
 `;
 
