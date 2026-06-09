@@ -58,7 +58,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (statut === 'en_fabrication') {
       const session = await getServerSession(authOptions);
       const role = (session?.user as any)?.role;
-      if (!role || !['responsable_prod', 'production'].includes(role)) {
+      
+    if (!role || !['responsable_prod', 'production', 'responsable_production'].includes(role)) {
         return Response.json(
           { error: 'Accès refusé — seul le responsable de production peut lancer la fabrication', code: 'FORBIDDEN' },
           { status: 403 }
