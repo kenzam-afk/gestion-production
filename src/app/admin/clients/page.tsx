@@ -60,19 +60,47 @@ export default function Clients() {
   }, [search, clients]);
 
   function openAdd() { setEditClient(null); setForm({ nom: "", email: "", telephone: "", adresse: "" }); setShowModal(true); }
-  function openEdit(c: Client) { setEditClient(c); setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse }); setShowModal(true); }
+  function openEdit(c: Client) {
+  setEditClient(c);
+  setForm({
+    nom:       c.nom       || '',
+    email:     c.email     || '',
+    telephone: c.telephone || '',
+    adresse:   c.adresse   || '',
+  });
+  setShowModal(true);
+}
 
   async function handleSubmit() {
-    const url = editClient ? `/api/clients/${editClient.id}` : "/api/clients";
-    await fetch(url, { method: editClient ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-    setShowModal(false); fetchClients();
+  const url = editClient ? `/api/clients/${editClient.id}` : "/api/clients";
+  const res = await fetch(url, {
+    method: editClient ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: 'include',
+    body: JSON.stringify(form),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert('Erreur : ' + (data.error || 'Inconnue'));
+    return;
   }
+  setShowModal(false);
+  fetchClients();
+}
 
   async function handleDelete(id: number) {
-    if (!confirm("Supprimer ce client ?")) return;
-    await fetch(`/api/clients/${id}`, { method: "DELETE" });
-    fetchClients();
+  if (!confirm("Supprimer ce client ?")) return;
+  const res = await fetch(`/api/clients/${id}`, {
+    method: "DELETE",
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    alert('Erreur suppression : ' + (data.error || 'Client lié à des commandes existantes'));
+    return;
   }
+  fetchClients();
+}
 
   const individuel = clients.filter(c => c.type_client !== "entreprise").length;
   const entreprise = clients.filter(c => c.type_client === "entreprise").length;

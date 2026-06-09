@@ -3,7 +3,7 @@ import sql from '@/lib/db';
 // ─── GET : un client avec ses commandes ─────────────────────
 export async function GET(req, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const [client] = await sql`
       SELECT c.*,
         COUNT(cmd.id)            AS total_commandes,
@@ -30,7 +30,7 @@ export async function GET(req, { params }) {
 // ─── PUT : modifier un client ────────────────────────────────
 export async function PUT(req, { params }) {
   try {
-    const { id }  = params;
+    const { id } = await params;
     const body    = await req.json();
     const { nom, prenom, email, telephone, adresse, titre, nif, siege_social } = body;
 
@@ -57,7 +57,7 @@ export async function PUT(req, { params }) {
 // ─── DELETE : supprimer un client ───────────────────────────
 export async function DELETE(req, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     await sql`DELETE FROM clients WHERE id = ${id}`;
     return Response.json({ success: true });
   } catch (error) {
