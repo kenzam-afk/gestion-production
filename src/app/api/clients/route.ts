@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
 
-    // Récupérer un client par email
     if (email) {
       const [client] = await sql`SELECT * FROM clients WHERE email = ${email}`;
       return Response.json(client || null);
@@ -41,6 +40,22 @@ export async function POST(request: NextRequest) {
       nom, prenom, date_naissance, nin,
       titre, nif, annee_creation, siege_social,
     } = body;
+
+    // Vérifier NIN (individuel)
+    if (nin) {
+      const ninExist = await sql`SELECT id FROM clients WHERE nin = ${nin}`;
+      if (ninExist.length > 0) {
+        return Response.json({ error: 'Ce NIN est déjà associé à un client existant' }, { status: 400 });
+      }
+    }
+
+    // Vérifier NIF (entreprise)
+    if (nif) {
+      const nifExist = await sql`SELECT id FROM clients WHERE nif = ${nif}`;
+      if (nifExist.length > 0) {
+        return Response.json({ error: 'Ce NIF est déjà associé à un client existant' }, { status: 400 });
+      }
+    }
 
     const [result] = await sql`
       INSERT INTO clients (

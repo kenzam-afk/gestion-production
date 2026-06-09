@@ -20,6 +20,20 @@ export async function POST(request: Request) {
     if (existing.length > 0) {
       return Response.json({ error: 'Cet email est déjà utilisé' }, { status: 400 });
     }
+    if (nin) {
+  const ninExist = await sql`SELECT id FROM clients WHERE nin = ${nin}`;
+  if (ninExist.length > 0) {
+    return Response.json({ error: 'Ce NIN est déjà associé à un compte existant' }, { status: 400 });
+  }
+}
+
+// Vérifier NIF (entreprise)
+if (nif) {
+  const nifExist = await sql`SELECT id FROM clients WHERE nif = ${nif}`;
+  if (nifExist.length > 0) {
+    return Response.json({ error: 'Ce NIF est déjà associé à un compte existant' }, { status: 400 });
+  }
+}
 
     const hash = await bcrypt.hash(mot_de_passe, 10);
 

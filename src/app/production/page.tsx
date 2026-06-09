@@ -156,7 +156,7 @@ export default function ProductionPage() {
     fetchAll();
   }
 
-  async function handleValidation() {
+  async function handleValidation() { 
     if (!modalValidation || !valForm.quantite_produite) return;
     setSaving(true);
     try {

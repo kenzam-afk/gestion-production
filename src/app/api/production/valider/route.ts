@@ -71,6 +71,63 @@ export async function POST(req: NextRequest) {
     `;
 
     await sql`UPDATE ordres_fabrication SET statut = 'termine', date_fin = CURRENT_DATE WHERE id = ${ordre_fab_id}`;
+    if (ordre.commande_id) {
+  const ordresRestants = await sql`
+    SELECT COUNT(*) AS nb
+    FROM ordres_fabrication
+    WHERE commande_id = ${ordre.commande_id}
+      AND statut != 'termine'
+      AND id != ${ordre_fab_id}
+  `;
+
+  const nbRestants = Number(ordresRestants[0]?.nb || 0);
+
+  if (nbRestants === 0) {
+    // Tous les ordres sont terminés → commande pret_livraison
+    await sql`
+  UPDATE commandes
+  SET statut = 'pret_livraison', updated_at = NOW()
+  WHERE id = ${ordre.commande_id}
+    AND statut IN ('en_fabrication', 'en_production')
+`;
+  }
+  if (nbRestants === 0) {
+  await sql`
+    UPDATE commandes
+    SET statut = 'pret_livraison', updated_at = NOW()
+    WHERE id = ${ordre.commande_id}
+      AND statut IN ('en_fabrication', 'en_production')
+  `;
+
+  // Créer la livraison si elle n'existe pas encore
+  const [existeLivraison] = await sql`
+    SELECT id FROM livraisons WHERE commande_id = ${ordre.commande_id}
+  `;
+
+  if (!existeLivraison) {
+    const [cmdInfo] = await sql`
+      SELECT c.adresse_livraison, cl.adresse AS client_adresse
+      FROM commandes c
+      LEFT JOIN clients cl ON cl.id = c.client_id
+      WHERE c.id = ${ordre.commande_id}
+    `;
+
+    const adresse = cmdInfo?.adresse_livraison || cmdInfo?.client_adresse || '';
+
+    const [livraison] = await sql`
+      INSERT INTO livraisons (commande_id, adresse, statut)
+      VALUES (${ordre.commande_id}, ${adresse}, 'en_attente')
+      RETURNING *
+    `;
+
+    const numBon = `BL-${new Date().getFullYear()}-${String(livraison.id).padStart(4, '0')}`;
+    await sql`
+      INSERT INTO bons_livraison (livraison_id, commande_id, numero_bon, date_emission)
+      VALUES (${livraison.id}, ${ordre.commande_id}, ${numBon}, CURRENT_DATE)
+    `;
+  }
+}
+}
 
     const [validation] = await sql`
       INSERT INTO validations_production (ordre_fab_id, responsable_id, quantite_produite, quantite_rebutee, matieres_consommees, observations)
