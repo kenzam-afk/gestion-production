@@ -86,10 +86,10 @@ export default function CommandesPage() {
   const res = await fetch(`/api/commandes/${id}/valider`, { method: "POST" });
   const data = await res.json();
   if (data.ordres_fabrication_crees > 0) {
-    alert(`✅ Commande validée !\n🔴 ${data.ordres_fabrication_crees} ordre(s) de fabrication urgent(s) transmis au responsable de production.`);
-  } else {
-    alert("✅ Stock suffisant — commande validée directement.");
-  }
+  alert(`✅ Commande validée !\n🔴 ${data.ordres_fabrication_crees} ordre(s) de fabrication transmis au responsable de production.`);
+} else {
+  alert("✅ Stock suffisant — commande prête à livrer ! La livraison a été créée automatiquement.");
+}
   fetchAll();
 }
 

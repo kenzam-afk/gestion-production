@@ -91,11 +91,40 @@ const stockDispo = produit?.stock_disponible ?? 0;
       }
     }
 
-    const nouveauStatut = ordresCrees.length > 0 ? 'en_production' : 'validee';
-    await sql`
-      UPDATE commandes SET statut = ${nouveauStatut}, updated_at = NOW()
-      WHERE id = ${commande_id}
+
+const nouveauStatut = ordresCrees.length > 0 ? 'en_fabrication' : 'pret_livraison';
+await sql`
+  UPDATE commandes SET statut = ${nouveauStatut}, updated_at = NOW()
+  WHERE id = ${commande_id}
+`;
+
+// Si stock suffisant → créer la livraison directement
+if (ordresCrees.length === 0) {
+  const [existeLivraison] = await sql`
+    SELECT id FROM livraisons WHERE commande_id = ${commande_id}
+  `;
+
+  if (!existeLivraison) {
+    const [cmdInfo] = await sql`
+      SELECT c.adresse_livraison, cl.adresse AS client_adresse
+      FROM commandes c
+      LEFT JOIN clients cl ON cl.id = c.client_id
+      WHERE c.id = ${commande_id}
     `;
+    const adresse = cmdInfo?.adresse_livraison || cmdInfo?.client_adresse || '';
+
+    const [livraison] = await sql`
+      INSERT INTO livraisons (commande_id, adresse, statut)
+      VALUES (${commande_id}, ${adresse}, 'en_attente')
+      RETURNING *
+    `;
+    const numBon = `BL-${new Date().getFullYear()}-${String(livraison.id).padStart(4, '0')}`;
+    await sql`
+      INSERT INTO bons_livraison (livraison_id, commande_id, numero_bon, date_emission)
+      VALUES (${livraison.id}, ${commande_id}, ${numBon}, CURRENT_DATE)
+    `;
+  }
+}
 
     return Response.json({
       success: true,
