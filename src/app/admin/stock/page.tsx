@@ -184,7 +184,7 @@ export default function StockPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                    {['Produit', 'Stock dispo', 'Stock min', 'Demandé', 'Solde', 'État', 'Ajuster'].map(h => (
+                    {['Produit', 'Stock dispo', 'Stock min', 'Demandé', 'Solde', 'État'].map(h => (
                       <th key={h} style={{ padding: '11px 14px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -227,12 +227,6 @@ export default function StockPage() {
                           </span>
                         </td>
                         <td style={{ padding: '12px 14px' }}>{etatBadge(p.etat_stock)}</td>
-                        <td style={{ padding: '12px 14px' }}>
-                          <button onClick={() => setModal({ type: 'produit', id: p.id, nom: p.nom })}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(124,58,237,.1)', border: '1px solid rgba(124,58,237,.25)', color: '#a855f7', borderRadius: 8, padding: '5px 11px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>
-                            <Plus size={12} /><Minus size={12} /> Ajuster
-                          </button>
-                        </td>
                       </tr>
                     );
                   })}
@@ -247,7 +241,7 @@ export default function StockPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-                    {['Matière', 'Stock actuel', 'Stock min', 'État', 'Ajuster'].map(h => (
+                    {['Matière', 'Stock actuel', 'Stock min', 'État'].map(h => (
                       <th key={h} style={{ padding: '11px 14px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left' }}>{h}</th>
                     ))}
                   </tr>
@@ -276,12 +270,6 @@ export default function StockPage() {
                         </td>
                         <td style={{ padding: '12px 14px', fontSize: 13, color: 'var(--text-secondary)' }}>{m.stock_minimum} {m.unite}</td>
                         <td style={{ padding: '12px 14px' }}>{etatBadge(m.etat_stock)}</td>
-                        <td style={{ padding: '12px 14px' }}>
-                          <button onClick={() => setModal({ type: 'matiere', id: m.id, nom: m.titre })}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(6,182,212,.1)', border: '1px solid rgba(6,182,212,.25)', color: '#06b6d4', borderRadius: 8, padding: '5px 11px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>
-                            <Plus size={12} /><Minus size={12} /> Ajuster
-                          </button>
-                        </td>
                       </tr>
                     );
                   })}

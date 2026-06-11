@@ -98,8 +98,8 @@ export default function LivreursPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 20 }}>
         {[
           { label: 'Total livreurs',       value: livreurs.length, color: '#06b6d4', bg: 'rgba(6,182,212,.1)',   border: 'rgba(6,182,212,.2)' },
-          { label: 'Livraisons totales',   value: livreurs.reduce((a, l) => a + (l.livraisons_count || 0), 0), color: '#a855f7', bg: 'rgba(168,85,247,.1)', border: 'rgba(168,85,247,.2)' },
-          { label: 'Livraisons terminées', value: livreurs.reduce((a, l) => a + (l.livraisons_terminees || 0), 0), color: '#10b981', bg: 'rgba(16,185,129,.1)', border: 'rgba(16,185,129,.2)' },
+          { label: 'Livraisons totales',   value: livreurs.reduce((a, l) => a + Number(l.livraisons_count || 0), 0), color: '#a855f7', bg: 'rgba(168,85,247,.1)', border: 'rgba(168,85,247,.2)' },
+          { label: 'Livraisons terminées', value: livreurs.reduce((a, l) => a + Number(l.livraisons_terminees || 0), 0), color: '#10b981', bg: 'rgba(16,185,129,.1)', border: 'rgba(16,185,129,.2)' },
         ].map((s, i) => (
           <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 14, padding: '18px 20px' }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
