@@ -748,8 +748,8 @@ export default function Home() {
                       <input className={`inp${telPanierErr?' inp-err':''}`} type="tel" placeholder="0555 123 456" value={infoPanier.telephone} onChange={e => setInfoPanier(p => ({...p, telephone:e.target.value.replace(/\D/g,'').slice(0,10)}))}/>
                       {telPanierErr && <div className="field-err"><AlertCircle size={11}/>Max 10 chiffres</div>}
                     </div>
-
-                    <div><label>Email *</label><input className="inp" type="email" placeholder="votre@email.com" value={infoPanier.email} onChange={e => setInfoPanier(p => ({...p, email:e.target.value}))}/></div>
+<div><label>Email *</label><input className="inp" type="email" autoComplete="off" placeholder="votre@email.com" value={infoPanier.email} onChange={e => setInfoPanier(p => ({...p, email:e.target.value}))}/></div>
+                    
 
                     <div>
                       <label>Mot de passe * <span style={{ color:'#5c5a7a', fontWeight:400 }}>(min 8 caractères)</span></label>
@@ -767,7 +767,7 @@ export default function Home() {
                     <div>
                       <label>Adresse de livraison *</label>
                       <div style={{ display:'flex', gap:8 }}>
-                        <input className="inp" style={{ flex:1 }} placeholder="Entrez votre adresse complète" value={infoPanier.adresse} onChange={e => setInfoPanier(p => ({...p, adresse:e.target.value}))}/>
+                        <input className="inp" style={{ flex:1 }} autoComplete="off" placeholder="Entrez votre adresse complète" value={infoPanier.adresse} onChange={e => setInfoPanier(p => ({...p, adresse:e.target.value}))}/>
                         <button onClick={obtenirLocalisationPanier} disabled={locLoading}
                           style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', color:'#34d399', borderRadius:10, padding:'0 14px', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', fontFamily:"'Outfit',sans-serif" }}>
                           <MapPin size={13}/> {locLoading?'...':'GPS'}
