@@ -11,16 +11,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       SELECT
         o.quantite,
         o.statut AS statut_actuel,
+        o.is_urgent,
         p.nom AS produit_nom
       FROM ordres_fabrication o
       JOIN produits p ON p.id = o.produit_id
       WHERE o.id = ${id}
     `;
 
+    // Préserver is_urgent même après changement de statut
+    const isUrgent = ordre?.is_urgent === true || String(ordre?.is_urgent) === 'true' || ordre?.is_urgent === 't';
+
     const [updated] = await sql`
       UPDATE ordres_fabrication
       SET
         statut     = ${statut},
+        is_urgent  = ${isUrgent},
         date_debut = CASE WHEN ${statut} = 'en_cours' AND date_debut IS NULL THEN CURRENT_DATE ELSE date_debut END,
         date_fin   = CASE WHEN ${statut} = 'termine'  THEN CURRENT_DATE ELSE date_fin END
       WHERE id = ${id}

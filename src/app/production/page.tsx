@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import {
   Factory, CheckCircle, PlayCircle, RefreshCw,
-  Layers, AlertTriangle, BarChart3, LogOut, X, Info,
-  BarChart2, ArrowRight, ShoppingCart, Package,
+  Layers, AlertTriangle, LogOut, X, Info,
+  BarChart2, ArrowRight, Package,
   Send,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -13,7 +13,7 @@ import Link from 'next/link';
 interface OrdreFab {
   id: number; produit_nom: string; produit_unite: string;
   commande_ref: number; quantite: number; statut: string;
-  is_urgent: boolean;  // ← ajoute cette ligne
+  is_urgent: boolean;
   date_debut: string | null; date_fin: string | null; created_at: string;
 }
 interface MatiereStock {
@@ -70,6 +70,10 @@ label{font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom
 
 type TabId = 'receptions' | 'fabrication' | 'matieres';
 
+// Helper pour détecter is_urgent peu importe le type retourné par PostgreSQL
+const checkUrgent = (o: OrdreFab) =>
+  o.is_urgent === true || String(o.is_urgent) === 'true' || (o as any).is_urgent === 't';
+
 export default function ProductionPage() {
   const { data: session } = useSession();
   const [ordres, setOrdres]                       = useState<OrdreFab[]>([]);
@@ -78,7 +82,7 @@ export default function ProductionPage() {
   const [demandesExpediees, setDemandesExpediees] = useState<DemandeExpediee[]>([]);
   const [fournisseurs, setFournisseurs]           = useState<any[]>([]);
   const [loading, setLoading]                     = useState(true);
-  const [activeTab, setActiveTab] = useState<TabId>('fabrication');
+  const [activeTab, setActiveTab]                 = useState<TabId>('fabrication');
 
   const [modalValidation, setModalValidation]   = useState<OrdreFab | null>(null);
   const [valForm, setValForm]                   = useState({ quantite_produite: '', quantite_rebutee: '0', observations: '' });
@@ -107,8 +111,7 @@ export default function ProductionPage() {
       setMatieres(Array.isArray(rm) ? rm : []);
       const all = Array.isArray(rc) ? rc : [];
       setCommandes(all.filter((c: any) => c.statut === 'confirmee' && c.source_urgence === true));
-      const enFabrication = all.filter((c: any) => c.statut === 'en_fabrication');
-      setCommandesEnFab(enFabrication);
+      setCommandesEnFab(all.filter((c: any) => c.statut === 'en_fabrication'));
       setDemandesExpediees(Array.isArray(rd) ? rd : []);
       setFournisseurs(Array.isArray(rf) ? rf : []);
     } finally { setLoading(false); }
@@ -126,7 +129,6 @@ export default function ProductionPage() {
         credentials: 'include',
       });
       const data = await res.json();
-
       if (!res.ok) {
         if (data.code === 'MATIERES_INSUFFISANTES') {
           setModalMatieres({ commande_id: commandeId, matieres: data.matieres_manquantes });
@@ -135,12 +137,9 @@ export default function ProductionPage() {
         }
         return;
       }
-
       setActiveTab('fabrication');
       await fetchAll();
-    } finally {
-      setLaunching(null);
-    }
+    } finally { setLaunching(null); }
   }
 
   async function handleStatut(id: number, statut: string) {
@@ -206,10 +205,14 @@ export default function ProductionPage() {
         body: JSON.stringify({ matiere_id: Number(matiereId), quantite: Math.ceil(quantite), fournisseur_id: Number(fournisseur.id) }),
       });
       const data = await res.json();
-      if (res.ok) alert(`✅ Demande envoyée à ${fournisseur.nom} !`);
+      if (res.ok) alert(`Demande envoyée à ${fournisseur.nom} !`);
       else alert('Erreur : ' + (data.error || 'Inconnue'));
     } catch { alert("Erreur lors de l'envoi"); }
   }
+
+  // ─── Filtres unifiés avec checkUrgent ───
+  const urgentsOrdres = ordres.filter(o => checkUrgent(o));
+  const mrpOrdres     = ordres.filter(o => !checkUrgent(o));
 
   const stats = {
     confirmees: commandes.length,
@@ -225,7 +228,6 @@ export default function ProductionPage() {
       <style>{DS}</style>
       <div style={{ height:2, background:'linear-gradient(90deg,#7c3aed,#ec4899,transparent)' }} />
 
-      {/* NAV */}
       <nav style={{ background:'var(--bg-base)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 24px', height:58 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -255,7 +257,6 @@ export default function ProductionPage() {
           <h1 style={{ fontSize:22, fontWeight:800, color:'var(--text-primary)', margin:0 }}>Responsable de Production</h1>
         </div>
 
-        {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:14, marginBottom:20 }}>
           {[
             { label:'À lancer',           value:stats.confirmees, color:'#a855f7', bg:'rgba(168,85,247,.1)', border:'rgba(168,85,247,.2)' },
@@ -272,20 +273,19 @@ export default function ProductionPage() {
           ))}
         </div>
 
-        {/* Card tabs */}
         <div className="card">
           <div style={{ display:'flex', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
             {([
-              { id:'fabrication', label:'Ordres fabrication',  icon:<Factory size={13}/>,      badge: 0 },
-              { id:'receptions',  label:'Réceptions matières', icon:<Package size={13}/>,      badge: stats.receptions },
-              { id:'matieres',    label:'Stock matières',      icon:<Layers size={13}/>,       badge: 0 },
+              { id:'fabrication', label:'Ordres fabrication',  icon:<Factory size={13}/>,  badge: 0 },
+              { id:'receptions',  label:'Réceptions matières', icon:<Package size={13}/>,  badge: stats.receptions },
+              { id:'matieres',    label:'Stock matières',      icon:<Layers size={13}/>,   badge: 0 },
             ] as {id:TabId;label:string;icon:any;badge:number}[]).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`tab-btn${activeTab===tab.id?' active':''}`}
                 style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, whiteSpace:'nowrap' }}>
                 {tab.icon} {tab.label}
                 {tab.badge > 0 && (
-                  <span style={{ background: tab.id==='receptions'?'#10b981':'#a855f7', color:'white', fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:20, marginLeft:2 }}>
+                  <span style={{ background:'#10b981', color:'white', fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:20, marginLeft:2 }}>
                     {tab.badge}
                   </span>
                 )}
@@ -295,11 +295,11 @@ export default function ProductionPage() {
 
           <div style={{ padding:24 }}>
 
-            {/* ── TAB Réceptions ── */}
+            {/* TAB Réceptions */}
             {activeTab === 'receptions' && (
               <div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                  <div style={{ fontSize:13, color:'var(--text-secondary)' }}>Livraisons expédiées par les fournisseurs — confirme la réception physique</div>
+                  <div style={{ fontSize:13, color:'var(--text-secondary)' }}>Livraisons expédiées par les fournisseurs</div>
                   <button onClick={fetchAll} className="btn-ghost"><RefreshCw size={13} style={{ animation:loading?'spin 1s linear infinite':'none' }}/> Actualiser</button>
                 </div>
                 {demandesExpediees.length === 0 ? (
@@ -335,7 +335,7 @@ export default function ProductionPage() {
               </div>
             )}
 
-            {/* ── TAB Fabrication ── */}
+            {/* TAB Fabrication */}
             {activeTab === 'fabrication' && (
               <div>
                 <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
@@ -345,36 +345,36 @@ export default function ProductionPage() {
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
 
-                  {/* Urgences admin */}
+                  {/* Colonne Urgences */}
                   <div>
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
                       <div style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 8px #ef4444' }}/>
                       <span style={{ fontWeight:700, fontSize:13, color:'#ef4444' }}>Urgences admin</span>
                       <span style={{ background:'rgba(239,68,68,.15)', color:'#ef4444', border:'1px solid rgba(239,68,68,.3)', borderRadius:20, fontSize:11, fontWeight:700, padding:'1px 8px' }}>
-                        {ordres.filter(o => o.statut === 'urgent').length}
+                        {urgentsOrdres.length}
                       </span>
                     </div>
                     <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:12 }}>
                       Commandes transmises par l'admin — stock insuffisant détecté
                     </div>
-                    {ordres.filter(o => o.is_urgent === true).length === 0 ? (
+                    {urgentsOrdres.length === 0 ? (
                       <div style={{ textAlign:'center', padding:'40px 20px', background:'rgba(239,68,68,.04)', border:'1px dashed rgba(239,68,68,.2)', borderRadius:12 }}>
                         <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Aucune urgence en cours ✓</span>
                       </div>
                     ) : (
                       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                        {ordres
-                          .filter(o => o.statut === 'urgent')
+                        {urgentsOrdres
                           .sort((a, b) => {
                             const scoreA = a.quantite * 10 + Math.floor((Date.now() - new Date(a.created_at).getTime()) / 3600000);
                             const scoreB = b.quantite * 10 + Math.floor((Date.now() - new Date(b.created_at).getTime()) / 3600000);
                             return scoreB - scoreA;
                           })
                           .map((o, idx) => {
+                            const cfg   = STATUT_CFG[o.statut] || STATUT_CFG.urgent;
                             const score = o.quantite * 10 + Math.floor((Date.now() - new Date(o.created_at).getTime()) / 3600000);
                             return (
                               <div key={o.id} style={{ background:'rgba(239,68,68,.06)', borderRadius:12, border:'1px solid rgba(239,68,68,.25)', padding:'16px 18px', position:'relative', overflow:'hidden' }}>
-                                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, background: idx===0?'#ef4444':idx===1?'#f97316':'#f59e0b' }}/>
+                                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, background:idx===0?'#ef4444':idx===1?'#f97316':'#f59e0b' }}/>
                                 <div style={{ paddingLeft:8 }}>
                                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
                                     <div>
@@ -383,9 +383,11 @@ export default function ProductionPage() {
                                         Commande <strong style={{ color:'#ef4444' }}>#{o.commande_ref}</strong> · <strong>{o.quantite} {o.produit_unite}</strong> à fabriquer
                                       </div>
                                     </div>
-                                    <div style={{ textAlign:'right', flexShrink:0 }}>
-                                      <div style={{ fontSize:10, color:'var(--text-muted)', marginBottom:2 }}>Score priorité</div>
-                                      <div style={{ fontWeight:800, fontSize:16, color:'#ef4444' }}>{score}</div>
+                                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, flexShrink:0 }}>
+                                      <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 9px', borderRadius:20, fontSize:11, fontWeight:600, background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}` }}>
+                                        {cfg.label}
+                                      </span>
+                                      <div style={{ fontSize:10, color:'var(--text-muted)' }}>Score : <strong style={{ color:'#ef4444' }}>{score}</strong></div>
                                     </div>
                                   </div>
                                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10 }}>
@@ -393,14 +395,23 @@ export default function ProductionPage() {
                                       🕐 {new Date(o.created_at).toLocaleDateString('fr-FR')}
                                     </span>
                                     <div style={{ display:'flex', gap:6 }}>
-                                      <button onClick={() => handleStatut(o.id, 'en_cours')}
-                                        style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(239,68,68,.15)', border:'1px solid rgba(239,68,68,.4)', color:'#ef4444', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
-                                        <PlayCircle size={13}/> Démarrer
-                                      </button>
-                                      <button onClick={() => { setModalValidation(o); setValForm({ quantite_produite:String(o.quantite), quantite_rebutee:'0', observations:'' }); }}
-                                        style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', color:'#10b981', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
-                                        <CheckCircle size={13}/> Valider
-                                      </button>
+                                      {o.statut !== 'en_cours' && o.statut !== 'termine' && (
+                                        <button onClick={() => handleStatut(o.id, 'en_cours')}
+                                          style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(239,68,68,.15)', border:'1px solid rgba(239,68,68,.4)', color:'#ef4444', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                                          <PlayCircle size={13}/> Démarrer
+                                        </button>
+                                      )}
+                                      {o.statut !== 'termine' && (
+                                        <button onClick={() => { setModalValidation(o); setValForm({ quantite_produite:String(o.quantite), quantite_rebutee:'0', observations:'' }); }}
+                                          style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.25)', color:'#10b981', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Outfit',sans-serif" }}>
+                                          <CheckCircle size={13}/> Valider
+                                        </button>
+                                      )}
+                                      {o.statut === 'termine' && (
+                                        <span style={{ fontSize:12, color:'#10b981', fontWeight:600, display:'flex', alignItems:'center', gap:4 }}>
+                                          <CheckCircle size={13}/> Terminé
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -411,25 +422,25 @@ export default function ProductionPage() {
                     )}
                   </div>
 
-                  {/* Planification MRP */}
+                  {/* Colonne MRP */}
                   <div>
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
                       <div style={{ width:10, height:10, borderRadius:'50%', background:'#a855f7', boxShadow:'0 0 8px #a855f7' }}/>
                       <span style={{ fontWeight:700, fontSize:13, color:'#a855f7' }}>Planification MRP</span>
                       <span style={{ background:'rgba(168,85,247,.15)', color:'#a855f7', border:'1px solid rgba(168,85,247,.3)', borderRadius:20, fontSize:11, fontWeight:700, padding:'1px 8px' }}>
-                        {ordres.filter(o => !o.is_urgent).length}
+                        {mrpOrdres.length}
                       </span>
                     </div>
                     <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:12 }}>
                       Ordres prévisionnels issus de l'analyse et du forecasting mensuel
                     </div>
-                    {ordres.filter(o => o.statut !== 'urgent').length === 0 ? (
+                    {mrpOrdres.length === 0 ? (
                       <div style={{ textAlign:'center', padding:'40px 20px', background:'rgba(168,85,247,.04)', border:'1px dashed rgba(168,85,247,.2)', borderRadius:12 }}>
                         <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Aucun ordre planifié</span>
                       </div>
                     ) : (
                       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                        {ordres.filter(o => o.statut !== 'urgent').map(o => {
+                        {mrpOrdres.map(o => {
                           const cfg = STATUT_CFG[o.statut] || STATUT_CFG.planifie;
                           return (
                             <div key={o.id} style={{ background:'var(--bg-surface)', borderRadius:12, border:'1px solid var(--border)', padding:'16px 18px', position:'relative', overflow:'hidden' }}>
@@ -481,7 +492,7 @@ export default function ProductionPage() {
               </div>
             )}
 
-            {/* ── TAB Matières ── */}
+            {/* TAB Matières */}
             {activeTab === 'matieres' && (
               <div>
                 {stats.critique > 0 && (
@@ -522,8 +533,6 @@ export default function ProductionPage() {
         </div>
       </div>
 
-      {/* ═══ MODALS ═══ */}
-
       {/* Modal matières manquantes */}
       {modalMatieres && (
         <div className="overlay" onClick={() => setModalMatieres(null)}>
@@ -535,7 +544,7 @@ export default function ProductionPage() {
               <button onClick={() => setModalMatieres(null)} style={{ width:28, height:28, borderRadius:8, background:'rgba(255,255,255,.06)', border:'1px solid var(--border)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-secondary)' }}><X size={14}/></button>
             </div>
             <div style={{ background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.2)', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:12.5, color:'var(--text-secondary)' }}>
-              La fabrication de la commande <strong style={{ color:'var(--text-primary)' }}>#{modalMatieres.commande_id}</strong> ne peut pas démarrer — stocks insuffisants pour ces matières :
+              La fabrication de la commande <strong style={{ color:'var(--text-primary)' }}>#{modalMatieres.commande_id}</strong> ne peut pas démarrer — stocks insuffisants :
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
               {modalMatieres.matieres.map((m, i) => (
@@ -554,9 +563,7 @@ export default function ProductionPage() {
                     ))}
                   </div>
                   <div style={{ marginTop:10, display:'flex', justifyContent:'flex-end' }}>
-                    <button className="btn-orange" onClick={() => {
-                      commanderFournisseur(0, m.manque, m.matiere);
-                    }}>
+                    <button className="btn-orange" onClick={() => commanderFournisseur(0, m.manque, m.matiere)}>
                       <Send size={11}/> Commander au fournisseur
                     </button>
                   </div>
@@ -609,7 +616,7 @@ export default function ProductionPage() {
         </div>
       )}
 
-      {/* Modal validation production */}
+      {/* Modal validation */}
       {modalValidation && (
         <div className="overlay" onClick={() => setModalValidation(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
