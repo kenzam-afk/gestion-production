@@ -45,13 +45,22 @@ export default function FournisseurPage() {
     setLoading(true);
     try {
       const userId = (session?.user as any)?.id;
-      const res    = await fetch(`/api/fournisseurs/demande?utilisateur_id=${userId}`);
+      const res = await fetch(`/api/fournisseurs/demande?utilisateur_id=${userId}`, { cache: 'no-store' });
       const data   = await res.json();
       setDemandes(Array.isArray(data) ? data : []);
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { if (session?.user) fetchDemandes(); }, [session]);
+  useEffect(() => { 
+  if (session?.user) fetchDemandes(); 
+}, [session?.user]);
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    if (session?.user) fetchDemandes();
+  }, 30000);
+  return () => clearInterval(interval);
+}, [session]);
 
   async function confirmerDemande(id: number) {
     await fetch(`/api/fournisseurs/demande/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({statut:'confirmee'}) });
