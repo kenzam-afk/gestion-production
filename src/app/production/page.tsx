@@ -13,6 +13,7 @@ import Link from 'next/link';
 interface OrdreFab {
   id: number; produit_nom: string; produit_unite: string;
   commande_ref: number; quantite: number; statut: string;
+  is_urgent: boolean;  // ← ajoute cette ligne
   date_debut: string | null; date_fin: string | null; created_at: string;
 }
 interface MatiereStock {
@@ -356,7 +357,7 @@ export default function ProductionPage() {
                     <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:12 }}>
                       Commandes transmises par l'admin — stock insuffisant détecté
                     </div>
-                    {ordres.filter(o => o.statut === 'urgent').length === 0 ? (
+                    {ordres.filter(o => o.is_urgent === true).length === 0 ? (
                       <div style={{ textAlign:'center', padding:'40px 20px', background:'rgba(239,68,68,.04)', border:'1px dashed rgba(239,68,68,.2)', borderRadius:12 }}>
                         <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Aucune urgence en cours ✓</span>
                       </div>
@@ -416,7 +417,7 @@ export default function ProductionPage() {
                       <div style={{ width:10, height:10, borderRadius:'50%', background:'#a855f7', boxShadow:'0 0 8px #a855f7' }}/>
                       <span style={{ fontWeight:700, fontSize:13, color:'#a855f7' }}>Planification MRP</span>
                       <span style={{ background:'rgba(168,85,247,.15)', color:'#a855f7', border:'1px solid rgba(168,85,247,.3)', borderRadius:20, fontSize:11, fontWeight:700, padding:'1px 8px' }}>
-                        {ordres.filter(o => o.statut !== 'urgent').length}
+                        {ordres.filter(o => !o.is_urgent).length}
                       </span>
                     </div>
                     <div style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:12 }}>
