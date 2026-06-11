@@ -102,7 +102,7 @@ export default function LivreurPage() {
     if (!raison) return;
     await fetch('/api/livraisons/' + id, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ statut: 'en_attente', date_livraison: null, raison_echec: raison }),
+      body: JSON.stringify({ statut: 'probleme', date_livraison: null, raison_echec: raison }),
     });
     setModalId(null); setRaison('');
     fetchLivraisons();
@@ -291,12 +291,22 @@ export default function LivreurPage() {
                 <div style={{ background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.25)', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#f59e0b', marginBottom:10 }}>
                   ⚠ Raison : {RAISONS.find(r => r.value === l.raison_echec)?.label || l.raison_echec}
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
                   <button onClick={() => window.location.href = 'tel:' + l.client_telephone} className="btn-ghost" style={{ justifyContent:'center' }}>
                     <Phone size={13} /> Rappeler
                   </button>
                   <button onClick={() => marquerLivree(l.id)} className="btn-green">
                     <CheckCircle size={13} /> Livrée
+                  </button>
+                  <button onClick={async () => {
+                    if (!confirm('Annuler cette livraison ?')) return;
+                    await fetch('/api/livraisons/' + l.id, {
+                      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ statut: 'annulee' }),
+                    });
+                    fetchLivraisons();
+                  }} className="btn-red">
+                    <XCircle size={13} /> Annuler
                   </button>
                 </div>
               </div>
