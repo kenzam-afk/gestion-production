@@ -275,8 +275,8 @@ export default function ProductionPage() {
         <div className="card">
           <div style={{ display:'flex', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
             {([
-              { id:'receptions',  label:'Réceptions matières', icon:<Package size={13}/>,      badge: stats.receptions },
               { id:'fabrication', label:'Ordres fabrication',  icon:<Factory size={13}/>,      badge: 0 },
+              { id:'receptions',  label:'Réceptions matières', icon:<Package size={13}/>,      badge: stats.receptions },
               { id:'matieres',    label:'Stock matières',      icon:<Layers size={13}/>,       badge: 0 },
             ] as {id:TabId;label:string;icon:any;badge:number}[]).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
