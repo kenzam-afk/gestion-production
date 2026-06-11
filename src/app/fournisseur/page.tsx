@@ -45,15 +45,18 @@ export default function FournisseurPage() {
     setLoading(true);
     try {
       const userId = (session?.user as any)?.id;
+      if (!userId) return;
       const res = await fetch(`/api/fournisseurs/demande?utilisateur_id=${userId}`, { cache: 'no-store' });
       const data   = await res.json();
       setDemandes(Array.isArray(data) ? data : []);
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { 
-  if (session?.user) fetchDemandes(); 
-}, [session?.user]);
+  useEffect(() => {
+  if (session?.user) {
+    setTimeout(() => fetchDemandes(), 500);
+  }
+}, [session]);
 
 useEffect(() => {
   const interval = setInterval(() => {
