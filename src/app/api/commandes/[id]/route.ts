@@ -30,13 +30,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       WHERE cp.commande_id = ${id}
     `;
     const [bon_commande]  = await sql`SELECT * FROM bons_commande WHERE commande_id = ${id}`;
+const ordresFab = await sql`SELECT id FROM ordres_fabrication WHERE commande_id = ${id} LIMIT 1`;
+const est_fabrique = ordresFab.length > 0;
     const [bon_livraison] = await sql`
       SELECT bl.* FROM bons_livraison bl
       JOIN livraisons l ON l.id = bl.livraison_id
       WHERE bl.commande_id = ${id}
     `;
 
-    return Response.json({ ...commande, lignes, bon_commande: bon_commande || null, bon_livraison: bon_livraison || null });
+    return Response.json({ ...commande, lignes, bon_commande: bon_commande || null, bon_livraison: bon_livraison || null, est_fabrique });
   } catch (error: any) {
     return Response.json({ error: error.message }, { status: 500 });
   }

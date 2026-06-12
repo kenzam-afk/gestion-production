@@ -22,7 +22,8 @@ const STATUT_COLORS: Record<string, string> = {
   en_attente: '#f59e0b', confirmee: '#a855f7',
   en_fabrication: '#ec4899', livree: '#10b981', annulee: '#ef4444',
 };
-const STATUT_ETAPES = ['en_attente', 'confirmee', 'en_fabrication', 'livree'];
+const STATUT_ETAPES_FABRICATION = ['en_attente', 'confirmee', 'en_fabrication', 'pret_livraison', 'livree'];
+const STATUT_ETAPES_STOCK       = ['en_attente', 'confirmee', 'pret_livraison', 'livree'];
 
 // ── Helpers validation ──────────────────────────────────────────────────────
 const pwdOk  = (p: string) => p.length >= 8;
@@ -839,28 +840,38 @@ export default function Home() {
                 <div style={{ fontSize:22, fontWeight:800, background:'linear-gradient(135deg,#a855f7,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', marginBottom:16 }}>
                   {Number(resultatSuivi.total).toLocaleString('fr-DZ')} DA
                 </div>
-                {resultatSuivi.statut !== 'annulee' && (
-                  <>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
-                      {STATUT_ETAPES.map((etape,i) => {
-                        const idx  = STATUT_ETAPES.indexOf(resultatSuivi.statut);
-                        const done = i <= idx;
-                        const labels: Record<string,string> = { en_attente:'Reçue', confirmee:'Confirmée', en_fabrication:'Fabrication', livree:'Livrée' };
-                        return (
-                          <div key={etape} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1 }}>
-                            <div style={{ width:28, height:28, borderRadius:'50%', background:done?'linear-gradient(135deg,#7c3aed,#ec4899)':'rgba(255,255,255,.06)', color:done?'white':'#6b6890', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, marginBottom:6, boxShadow:done?'0 0 12px rgba(124,58,237,.4)':'none' }}>
-                              {done?'✓':i+1}
-                            </div>
-                            <span style={{ fontSize:9.5, color:done?'#c4b5fd':'#6b6890', fontWeight:done?600:400, textAlign:'center' }}>{labels[etape]}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="prog-track">
-                      <div className="prog-fill" style={{ width:`${(STATUT_ETAPES.indexOf(resultatSuivi.statut)/(STATUT_ETAPES.length-1))*100}%` }} />
-                    </div>
-                  </>
-                )}
+                {resultatSuivi.statut !== 'annulee' && (() => {
+  const avecFab = ['en_fabrication'].includes(resultatSuivi.statut) ||
+    (resultatSuivi.statut === 'pret_livraison' && resultatSuivi.est_fabrique) ||
+    (resultatSuivi.statut === 'livree' && resultatSuivi.est_fabrique);
+  const etapes = avecFab ? STATUT_ETAPES_FABRICATION : STATUT_ETAPES_STOCK;
+  const labels: Record<string,string> = {
+    en_attente:'Reçue', confirmee:'Confirmée',
+    en_fabrication:'Fabrication', pret_livraison:'Prête', livree:'Livrée'
+  };
+  const idx  = etapes.indexOf(resultatSuivi.statut);
+  const pct  = idx >= 0 ? (idx / (etapes.length - 1)) * 100 : 0;
+  return (
+    <>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+        {etapes.map((etape, i) => {
+          const done = i <= idx;
+          return (
+            <div key={etape} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1 }}>
+              <div style={{ width:28, height:28, borderRadius:'50%', background:done?'linear-gradient(135deg,#7c3aed,#ec4899)':'rgba(255,255,255,.06)', color:done?'white':'#6b6890', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, marginBottom:6, boxShadow:done?'0 0 12px rgba(124,58,237,.4)':'none' }}>
+                {done?'✓':i+1}
+              </div>
+              <span style={{ fontSize:9.5, color:done?'#c4b5fd':'#6b6890', fontWeight:done?600:400, textAlign:'center' }}>{labels[etape]}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="prog-track">
+        <div className="prog-fill" style={{ width:`${pct}%` }} />
+      </div>
+    </>
+  );
+})()}
                 {resultatSuivi.statut === 'annulee' && (
                   <div style={{ background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.25)', borderRadius:10, padding:11, textAlign:'center' }}>
                     <p style={{ color:'#fca5a5', fontSize:13, fontWeight:600, margin:0 }}>Cette commande a été annulée.</p>
