@@ -72,8 +72,10 @@ type TabId = 'receptions' | 'fabrication' | 'matieres';
 
 // Helper pour détecter is_urgent peu importe le type retourné par PostgreSQL
 const checkUrgent = (o: OrdreFab) =>
-  o.is_urgent === true || String(o.is_urgent) === 'true' || (o as any).is_urgent === 't';
-
+  o.is_urgent === true || 
+  String(o.is_urgent) === 'true' || 
+  (o as any).is_urgent === 't' ||
+  o.statut === 'urgent';
 export default function ProductionPage() {
   const { data: session } = useSession();
   const [ordres, setOrdres]                       = useState<OrdreFab[]>([]);
