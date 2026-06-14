@@ -447,7 +447,7 @@ export default function Home() {
                         </div>
                         {p.stock_disponible > 0 && <div style={{ fontSize:11, color:'#5c5a7a', marginTop:3 }}>{p.stock_disponible} unités dispo.</div>}
                       </div>
-                      {!rupture && (
+                      {(
                         inPanier ? (
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                             <button className="qty-btn" onClick={() => setQte(p.id, inPanier.quantite-1)}><Minus size={11}/></button>
