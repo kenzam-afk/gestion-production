@@ -135,8 +135,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       for (const ligne of lignes) {
         const existing = await sql`SELECT id FROM ordres_fabrication WHERE commande_id = ${id} AND produit_id = ${ligne.produit_id}`;
         if (existing.length === 0) {
-          await sql`INSERT INTO ordres_fabrication (commande_id, produit_id, quantite, statut) VALUES (${id}, ${ligne.produit_id}, ${ligne.quantite}, 'planifie')`;
-        }
+        await sql`INSERT INTO ordres_fabrication (commande_id, produit_id, quantite, statut, is_urgent) VALUES (${id}, ${ligne.produit_id}, ${ligne.quantite}, 'urgent', true)`;
+      }
       }
     }
 
