@@ -71,25 +71,24 @@ export async function POST(req: NextRequest) {
     `;
 
     await sql`UPDATE ordres_fabrication SET statut = 'termine', date_fin = CURRENT_DATE WHERE id = ${ordre_fab_id}`;
-    if (ordre.commande_id) {
+if (ordre.commande_id) {
   const ordresRestants = await sql`
     SELECT COUNT(*) AS nb
     FROM ordres_fabrication
     WHERE commande_id = ${ordre.commande_id}
-      AND statut != 'termine'
+      AND statut NOT IN ('termine')
       AND id != ${ordre_fab_id}
   `;
 
   const nbRestants = Number(ordresRestants[0]?.nb || 0);
 
-  if (nbRestants === 0) {
-    // Tous les ordres sont terminés → commande pret_livraison
+ if (nbRestants === 0) {
     await sql`
-  UPDATE commandes
-  SET statut = 'pret_livraison', updated_at = NOW()
-  WHERE id = ${ordre.commande_id}
-    AND statut IN ('en_fabrication', 'en_production')
-`;
+      UPDATE commandes
+      SET statut = 'pret_livraison', updated_at = NOW()
+      WHERE id = ${ordre.commande_id}
+        AND statut IN ('en_fabrication', 'en_production', 'confirmee')
+    `;
   }
   if (nbRestants === 0) {
   await sql`
